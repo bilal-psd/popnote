@@ -29,10 +29,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             NSApp.terminate(nil)
             return
         }
-        // Keep notes that were pinned by a "pin" first line pinned.
-        if let word = Settings.legacyPinKeyword, (try? store.pinNotes(withFirstLine: word)) != nil {
-            Settings.removeKeywords()
-        }
         sweep()
 
         noteController = NoteViewController(store: store)
@@ -61,9 +57,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     @objc private func sweep() {
+        // Nothing expires until notes pinned by a "pin" first line have the flag.
+        guard convertKeywordLines() else { return }
         _ = try? store.sweep(ttl: Settings.noteTTL, trashRetention: Settings.trashRetention)
         noteController?.refresh()
         trashWindow?.model.reload()
+    }
+
+    /// One-time upgrade from first-line keywords. False if it failed; it's
+    /// retried on the next sweep.
+    private func convertKeywordLines() -> Bool {
+        guard let keywords = Settings.legacyKeywords else { return true }
+        guard (try? store.convertKeywordLines(pin: keywords.pin, keywords: keywords.all)) != nil else { return false }
+        Settings.removeKeywords()
+        return true
     }
 
     // MARK: Settings
@@ -89,26 +96,53 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             if previous != nil { showPanel() } // switching policy can deactivate the app
         }
         if now.hotkeyKeyCode != previous?.hotkeyKeyCode || now.hotkeyModifiers != previous?.hotkeyModifiers {
-            registerHotKey(keyCode: now.hotkeyKeyCode, modifiers: now.hotkeyModifiers)
+            scheduleHotKeyUpdate()
+        }
+    }
+
+    private var hotKeyUpdatePending = false
+
+    /// The recorder saves the key code, modifiers and label one at a time;
+    /// register once they're all in, not each half-changed combination.
+    private func scheduleHotKeyUpdate() {
+        guard !hotKeyUpdatePending else { return }
+        hotKeyUpdatePending = true
+        DispatchQueue.main.async { [self] in
+            hotKeyUpdatePending = false
+            registerHotKey(keyCode: Settings.hotkeyKeyCode, modifiers: Settings.hotkeyModifiers)
         }
     }
 
     /// Swaps in a new global hotkey. If it can't be registered (rare: only when
-    /// another app claimed the keys exclusively), the one that was working stays.
+    /// another app claimed the keys exclusively), the one that was working
+    /// stays (the default at launch), and Settings is put back to match it.
     private func registerHotKey(keyCode: Int, modifiers: Int) {
+        if let inUse = hotKeyInUse, inUse.keyCode == keyCode, inUse.modifiers == modifiers, hotKey != nil { return }
         hotKey = nil // unregister the old one first; re-registering the same keys would fail
         let make = { HotKey(keyCode: $0, modifiers: $1) { [weak self] in self?.togglePanel() } }
         if let new = make(keyCode, modifiers) {
             hotKey = new
-            hotKeyInUse = (keyCode, modifiers)
+            hotKeyInUse = (keyCode, modifiers, Settings.hotkeyLabel)
             return
         }
         NSLog("Popnote: couldn't register shortcut \(keyCode)/\(modifiers); keeping the previous one")
-        if let inUse = hotKeyInUse { hotKey = make(inUse.keyCode, inUse.modifiers) }
+        let fallback = hotKeyInUse
+            ?? (Settings.Default.hotkeyKeyCode, Settings.Default.hotkeyModifiers, Settings.Default.hotkeyLabel)
+        guard fallback.keyCode != keyCode || fallback.modifiers != modifiers,
+              let restored = make(fallback.keyCode, fallback.modifiers) else { return }
+        hotKey = restored
+        hotKeyInUse = fallback
+        // Mark it applied first, so the writes below don't register it again.
+        applied?.hotkeyKeyCode = fallback.keyCode
+        applied?.hotkeyModifiers = fallback.modifiers
+        let defaults = UserDefaults.standard
+        defaults.set(fallback.keyCode, forKey: Settings.Key.hotkeyKeyCode)
+        defaults.set(fallback.modifiers, forKey: Settings.Key.hotkeyModifiers)
+        defaults.set(fallback.label, forKey: Settings.Key.hotkeyLabel)
     }
 
-    /// Keys of the hotkey that's actually registered.
-    private var hotKeyInUse: (keyCode: Int, modifiers: Int)?
+    /// The hotkey that's actually registered.
+    private var hotKeyInUse: (keyCode: Int, modifiers: Int, label: String)?
 
     @objc func biggerText(_ sender: Any?) { setTextSize(Settings.textSize + 1) }
     @objc func smallerText(_ sender: Any?) { setTextSize(Settings.textSize - 1) }

@@ -6,6 +6,19 @@ import SwiftUI
 
 private typealias Key = PopnoteCore.Settings.Key
 
+/// Explanation under a section, wrapping left-aligned.
+private struct FooterText: View {
+    let text: LocalizedStringKey
+    init(_ text: LocalizedStringKey) { self.text = text }
+
+    var body: some View {
+        Text(text)
+            .font(.caption).foregroundStyle(.secondary)
+            .multilineTextAlignment(.leading)
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
 // MARK: General
 
 private struct GeneralSettings: View {
@@ -43,10 +56,7 @@ private struct GeneralSettings: View {
                     Text(loginError).font(.caption).foregroundStyle(.red)
                 }
             } footer: {
-                Text("To change other shortcuts, add them for Popnote in System Settings › Keyboard › Keyboard Shortcuts › App Shortcuts, using the menu item's name.")
-                    .font(.caption).foregroundStyle(.secondary)
-                    .multilineTextAlignment(.leading)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                FooterText("To change other shortcuts, add them for Popnote in System Settings › Keyboard › Keyboard Shortcuts › App Shortcuts, using the menu item's name.")
             }
         }
         .formStyle(.grouped)
@@ -92,10 +102,7 @@ private struct AppearanceSettings: View {
                 }
             } footer: {
                 if !Fonts.hasNerdGlyphs {
-                    Text("Auto picks a Nerd Font if one is installed, for icons and powerline separators. Try `brew install --cask font-jetbrains-mono-nerd-font`.")
-                        .font(.caption).foregroundStyle(.secondary)
-                        .multilineTextAlignment(.leading)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                    FooterText("Auto picks a Nerd Font if one is installed, for icons and powerline separators. Try `brew install --cask font-jetbrains-mono-nerd-font`.")
                 }
             }
             Section {
@@ -128,10 +135,7 @@ private struct WindowSettings: View {
                 Toggle("Show in Dock", isOn: $showInDock)
             } footer: {
                 if !showInMenuBar && !showInDock {
-                    Text("Popnote will only open with \(hotkeyLabel).")
-                        .font(.caption).foregroundStyle(.secondary)
-                        .multilineTextAlignment(.leading)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                    FooterText("Popnote will only open with \(hotkeyLabel).")
                 }
             }
             Section {
@@ -165,6 +169,7 @@ private struct HotkeyRecorder: View {
     @AppStorage(Key.hotkeyModifiers) private var modifiers = PopnoteCore.Settings.Default.hotkeyModifiers
     @AppStorage(Key.hotkeyLabel) private var label = PopnoteCore.Settings.Default.hotkeyLabel
     @State private var monitor: Any?
+    @State private var problem: String?
 
     var body: some View {
         LabeledContent {
@@ -174,12 +179,17 @@ private struct HotkeyRecorder: View {
         } label: {
             Text("Open Popnote from anywhere")
             // macOS keeps its own shortcuts (e.g. ⌘Space); they never reach Popnote.
-            Text(monitor == nil ? "Click the shortcut to change it." : "Press the new keys, or Esc to cancel. macOS's own shortcuts won't work.")
+            if let problem {
+                Text(problem).foregroundStyle(.red)
+            } else {
+                Text(monitor == nil ? "Click the shortcut to change it." : "Press the new keys, or Esc to cancel. macOS's own shortcuts won't work.")
+            }
         }
         .onDisappear { stop() }
     }
 
     private func start() {
+        problem = nil
         // Only keys typed in this window count. Anything else (the window
         // closed, or the note panel came forward) ends recording.
         let window = NSApp.keyWindow
@@ -197,10 +207,25 @@ private struct HotkeyRecorder: View {
                 NSSound.beep()
                 return nil
             }
-            keyCode = Int(event.keyCode)
-            modifiers = carbonModifiers(flags)
-            label = symbols(flags) + keyName(event)
+            let newKeyCode = Int(event.keyCode), newModifiers = carbonModifiers(flags)
+            let newLabel = symbols(flags) + keyName(event)
             stop()
+            // A global hotkey takes the keys from every app, so not ⌘C, ⌘Q and the like.
+            if let taken = menuItem(for: event, flags: flags) {
+                problem = "\(newLabel) is already Popnote's “\(taken.title)” shortcut."
+                NSSound.beep()
+                return nil
+            }
+            // Only fails when another app claimed the keys exclusively.
+            let isCurrent = newKeyCode == keyCode && newModifiers == modifiers
+            guard isCurrent || HotKey(keyCode: newKeyCode, modifiers: newModifiers, action: {}) != nil else {
+                problem = "\(newLabel) can't be used: another app has it."
+                NSSound.beep()
+                return nil
+            }
+            keyCode = newKeyCode
+            modifiers = newModifiers
+            label = newLabel
             return nil
         }
     }
@@ -208,6 +233,23 @@ private struct HotkeyRecorder: View {
     private func stop() {
         if let monitor { NSEvent.removeMonitor(monitor) }
         monitor = nil
+    }
+
+    /// The main-menu item (⌘C Copy, ⌘Q Quit…) that already uses these keys.
+    private func menuItem(for event: NSEvent, flags: NSEvent.ModifierFlags) -> NSMenuItem? {
+        let key = (event.charactersIgnoringModifiers ?? "").lowercased()
+        func search(_ menu: NSMenu) -> NSMenuItem? {
+            for item in menu.items {
+                if let submenu = item.submenu, let found = search(submenu) { return found }
+                guard !item.keyEquivalent.isEmpty else { continue }
+                var mask = item.keyEquivalentModifierMask.intersection([.command, .option, .control, .shift])
+                // An uppercase key equivalent ("Z" for Redo) implies ⇧.
+                if item.keyEquivalent != item.keyEquivalent.lowercased() { mask.insert(.shift) }
+                if item.keyEquivalent.lowercased() == key && mask == flags { return item }
+            }
+            return nil
+        }
+        return NSApp.mainMenu.flatMap(search)
     }
 
     private func carbonModifiers(_ flags: NSEvent.ModifierFlags) -> Int {
@@ -251,12 +293,13 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     private static let positionKey = "settingsTopLeft"
 
     init() {
+        // Read before adding tabs: adding the first one selects it, which saves 0.
+        let pane = UserDefaults.standard.integer(forKey: SettingsTabs.paneKey)
         let tabs = SettingsTabs()
         tabs.tabStyle = .toolbar
         tabs.addTabViewItem(Self.tab("General", "gearshape", GeneralSettings()))
         tabs.addTabViewItem(Self.tab("Appearance", "paintbrush", AppearanceSettings()))
         tabs.addTabViewItem(Self.tab("Window", "macwindow", WindowSettings()))
-        let pane = UserDefaults.standard.integer(forKey: SettingsTabs.paneKey)
         tabs.selectedTabViewItemIndex = tabs.tabViewItems.indices.contains(pane) ? pane : 0
 
         let window = NSWindow(contentViewController: tabs)

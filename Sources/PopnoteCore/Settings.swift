@@ -109,11 +109,15 @@ public enum Settings {
 
     // MARK: Upgrades
 
-    /// Notes used to be pinned by a first line of "pin" (or a word renamed in
-    /// Settings). Until `removeKeywords()` runs, this is that word.
-    public static var legacyPinKeyword: String? {
+    /// A note's first line used to be a keyword: "list", "code" or "pin" (or
+    /// words renamed in Settings), and "pin" pinned the note. Until
+    /// `removeKeywords()` runs, these are those words.
+    public static var legacyKeywords: (pin: String, all: Set<String>)? {
         guard !bool(Key.keywordsRemoved, false) else { return nil }
-        return string("keywordPin")?.lowercased() ?? "pin"
+        let pin = string("keywordPin")?.lowercased() ?? "pin"
+        let list = string("keywordList")?.lowercased() ?? "list"
+        let code = string("keywordCode")?.lowercased() ?? "code"
+        return (pin, [list, code, pin])
     }
 
     public static func removeKeywords() {

@@ -91,12 +91,21 @@ private let t0 = Date(timeIntervalSince1970: 1_800_000_000)
     #expect(try store.activeNotes().map(\.id) == [a.id, b.id])
 }
 
-@Test func pinsNotesByFirstLine() throws {
+@Test func convertsKeywordLines() throws {
     let store = try NoteStore(url: nil)
-    let a = try store.insert(body: "  PIN \nsomething", now: t0)
-    let b = try store.insert(body: "hello\npin", now: t0)
-    try store.pinNotes(withFirstLine: "pin")
-    #expect(try store.note(id: a.id)?.pinned == true)
-    #expect(try store.note(id: b.id)?.pinned == false)
-}
+    let pinned = try store.insert(body: "  PIN \nwifi password", now: t0)
+    let list = try store.insert(body: "todo\n- [ ] eggs", now: t0)
+    let plain = try store.insert(body: "hello\npin", now: t0)
+    let trashed = try store.insert(body: "pin\nold", now: t0)
+    try store.moveToTrash(id: trashed.id, now: t0)
 
+    try store.convertKeywordLines(pin: "pin", keywords: ["todo", "code", "pin"])
+    let a = try #require(try store.note(id: pinned.id))
+    #expect(a.body == "wifi password" && a.pinned && a.updatedAt == t0)
+    let b = try #require(try store.note(id: list.id))
+    #expect(b.body == "- [ ] eggs" && !b.pinned && b.updatedAt == t0)
+    let c = try #require(try store.note(id: plain.id))
+    #expect(c.body == "hello\npin" && !c.pinned)
+    let d = try #require(try store.note(id: trashed.id))
+    #expect(d.body == "old" && d.pinned)
+}

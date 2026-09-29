@@ -82,13 +82,24 @@ public final class NoteStore {
         }
     }
 
-    /// Pins every active note whose first line is `word` (trimmed, any case).
-    public func pinNotes(withFirstLine word: String) throws {
-        for note in try activeNotes() where !note.pinned {
-            let first = note.body.split(separator: "\n", maxSplits: 1, omittingEmptySubsequences: false).first ?? ""
-            if first.trimmingCharacters(in: .whitespaces).lowercased() == word {
-                try setPinned(id: note.id, true)
+    /// Upgrades notes from first-line keywords: the keyword line (any of
+    /// `keywords`, trimmed, any case) is removed, and a note that started with
+    /// `pin` gets the pin flag. Covers Trash too, and keeps edit times.
+    public func convertKeywordLines(pin: String, keywords: Set<String>) throws {
+        try exec("BEGIN")
+        do {
+            for note in try activeNotes() + trashedNotes() {
+                let lines = note.body.split(separator: "\n", maxSplits: 1, omittingEmptySubsequences: false)
+                let first = (lines.first ?? "").trimmingCharacters(in: .whitespaces).lowercased()
+                guard keywords.contains(first) || first == pin else { continue }
+                let rest = lines.count > 1 ? String(lines[1]) : ""
+                try run("UPDATE notes SET body = ?, pinned = pinned OR ? WHERE id = ?",
+                        [.text(rest), .int(first == pin ? 1 : 0), .int(note.id)])
             }
+            try exec("COMMIT")
+        } catch {
+            try? exec("ROLLBACK")
+            throw error
         }
     }
 
