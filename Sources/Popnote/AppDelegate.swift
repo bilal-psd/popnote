@@ -91,8 +91,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
     }
 
-    /// Swaps in a new global hotkey. If it can't be registered (another app
-    /// holds it), the one that was working stays.
+    /// Swaps in a new global hotkey. If it can't be registered (rare: only when
+    /// another app claimed the keys exclusively), the one that was working stays.
     private func registerHotKey(keyCode: Int, modifiers: Int) {
         hotKey = nil // unregister the old one first; re-registering the same keys would fail
         let make = { HotKey(keyCode: $0, modifiers: $1) { [weak self] in self?.togglePanel() } }
@@ -101,7 +101,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             hotKeyInUse = (keyCode, modifiers)
             return
         }
-        NSLog("Popnote: shortcut \(keyCode)/\(modifiers) is taken by another app; keeping the previous one")
+        NSLog("Popnote: couldn't register shortcut \(keyCode)/\(modifiers); keeping the previous one")
         if let inUse = hotKeyInUse { hotKey = make(inUse.keyCode, inUse.modifiers) }
     }
 

@@ -192,7 +192,7 @@ private struct HotkeyRecorder: View {
             }
             .frame(minWidth: 110)
             if let taken {
-                Text("\(taken) is used by another app").font(.caption).foregroundStyle(.red)
+                Text("\(taken) is a macOS shortcut").font(.caption).foregroundStyle(.red)
             }
         }
         .onDisappear { stop() }
@@ -220,9 +220,8 @@ private struct HotkeyRecorder: View {
             let newKeyCode = Int(event.keyCode), newModifiers = carbonModifiers(flags)
             let newLabel = symbols(flags) + keyName(event)
             stop()
-            // Try it before saving, so a shortcut another app holds is never saved.
-            let isCurrent = newKeyCode == keyCode && newModifiers == modifiers
-            guard isCurrent || HotKey(keyCode: newKeyCode, modifiers: newModifiers, action: {}) != nil else {
+            // macOS would get these keys first, so Popnote would never open.
+            guard !HotKey.isSystemShortcut(keyCode: newKeyCode, modifiers: newModifiers) else {
                 taken = newLabel
                 NSSound.beep()
                 return nil
