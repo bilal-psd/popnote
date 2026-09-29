@@ -31,6 +31,10 @@ final class NoteViewController: NSViewController, NSTextViewDelegate, NSTextFiel
     private let scrim = ScrimView()
     private var theme = Theme.all[0]
 
+    private lazy var swipe = SwipeTransition(target: scrollView)
+    /// Reduce Motion fallback: the note switches once the swipe passes a threshold.
+    private var swipeFired = false
+
     private var searchMatchIDs: [Int64] = []
     private var searchCursor = 0
 
@@ -70,9 +74,15 @@ final class NoteViewController: NSViewController, NSTextViewDelegate, NSTextFiel
         scrollView.automaticallyAdjustsContentInsets = false
         // Bottom inset keeps the last line clear of the corner indicator.
         scrollView.contentInsets = NSEdgeInsets(top: 14, left: 0, bottom: 24, right: 0)
-        scrollView.onSwipe = { [weak self] direction in
+        scrollView.onSwipeBegan = { [weak self] in self?.swipeBegan() }
+        scrollView.onSwipeChanged = { [weak self] travel in self?.swipeChanged(travel) }
+        scrollView.onSwipeEnded = { [weak self] velocity in self?.swipeEnded(velocity) }
+        swipe.render = { [weak self] in self?.renderForSwipe() ?? (nil, SwipeTransition.Neighbours()) }
+        swipe.commit = { [weak self] direction in
             guard let self else { return }
             direction > 0 ? self.nextNote(nil) : self.previousNote(nil)
+            // The incoming picture showed the note from the top; match it.
+            self.scrollToTop()
         }
 
         searchBar.field.delegate = self
@@ -222,6 +232,66 @@ final class NoteViewController: NSViewController, NSTextViewDelegate, NSTextFiel
         draftPinned = false
         index = max(0, min(target, notes.count))
         show()
+    }
+
+    // MARK: Swiping between notes
+
+    private var reduceMotion: Bool { NSWorkspace.shared.accessibilityDisplayShouldReduceMotion }
+
+    private func swipeBegan() {
+        swipeFired = false
+        if !reduceMotion { swipe.begin() }
+    }
+
+    private func swipeChanged(_ travel: CGFloat) {
+        if swipe.isActive {
+            swipe.update(travel)
+        } else if reduceMotion, !swipeFired, abs(travel) > 50 {
+            // No motion: just switch, like turning a page.
+            swipeFired = true
+            travel < 0 ? nextNote(nil) : previousNote(nil)
+        }
+    }
+
+    private func swipeEnded(_ velocity: CGFloat) {
+        if swipe.isActive { swipe.end(velocity: velocity) }
+    }
+
+    /// Pictures of the current note and its neighbours, drawn by the real
+    /// editor so they match it exactly. The editor's text, selection and
+    /// scroll position are put back afterwards.
+    private func renderForSwipe() -> (current: CGImage?, neighbours: SwipeTransition.Neighbours) {
+        let current = snapshot(scrollView)
+        let savedText = textView.string
+        let savedSelection = textView.selectedRanges
+        let savedOrigin = scrollView.contentView.bounds.origin
+
+        func render(_ body: String) -> CGImage? {
+            textView.string = body
+            scrollToTop()
+            return snapshot(scrollView)
+        }
+        var neighbours = SwipeTransition.Neighbours()
+        if index > 0 { neighbours.previous = render(notes[index - 1].body) }
+        // Past the newest note is a blank new note (its hint shows in the picture).
+        if index < notes.count { neighbours.next = render(index + 1 < notes.count ? notes[index + 1].body : "") }
+
+        textView.string = savedText
+        textView.selectedRanges = savedSelection
+        scrollView.contentView.scroll(to: savedOrigin)
+        scrollView.reflectScrolledClipView(scrollView.contentView)
+        return (current, neighbours)
+    }
+
+    private func snapshot(_ view: NSView) -> CGImage? {
+        guard let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return nil }
+        view.cacheDisplay(in: view.bounds, to: rep)
+        return rep.cgImage
+    }
+
+    private func scrollToTop() {
+        scrollView.contentView.scroll(to: NSPoint(x: 0, y: -scrollView.contentInsets.top))
+        scrollView.reflectScrolledClipView(scrollView.contentView)
     }
 
     // MARK: Note actions

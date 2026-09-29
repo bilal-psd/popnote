@@ -2,15 +2,23 @@ import AppKit
 
 /// Scroll view that turns a horizontal two-finger swipe into note navigation.
 /// Vertical scrolling and mouse wheels behave normally.
+///
+/// It reports the whole gesture (start, finger travel, release with velocity)
+/// so the note can follow the fingers. Distances are in the direction the
+/// fingers moved, whatever the natural-scrolling setting: negative = left.
 final class SwipeScrollView: NSScrollView {
-    /// -1 = previous (older) note, +1 = next (newer) note.
-    var onSwipe: ((Int) -> Void)?
+    var onSwipeBegan: (() -> Void)?
+    var onSwipeChanged: ((CGFloat) -> Void)?
+    /// Called with the finger velocity at release, in points per second.
+    var onSwipeEnded: ((CGFloat) -> Void)?
 
     private enum Axis { case undecided, horizontal, vertical }
     private var axis = Axis.undecided
     private var travelled: CGFloat = 0
-    private var fired = false
-    private let threshold: CGFloat = 50
+    private var began = false
+
+    /// Recent (time, distance) samples for the release velocity.
+    private var samples: [(time: TimeInterval, travelled: CGFloat)] = []
 
     override func scrollWheel(with event: NSEvent) {
         // Mouse wheels report no phases.
@@ -21,7 +29,8 @@ final class SwipeScrollView: NSScrollView {
         if event.phase.contains(.mayBegin) || event.phase.contains(.began) {
             axis = .undecided
             travelled = 0
-            fired = false
+            began = false
+            samples = []
         }
         if axis == .undecided && !event.phase.isEmpty {
             let dx = abs(event.scrollingDeltaX), dy = abs(event.scrollingDeltaY)
@@ -34,13 +43,26 @@ final class SwipeScrollView: NSScrollView {
         // Swallow the momentum that follows a horizontal swipe.
         guard !event.phase.isEmpty else { return }
 
-        // Normalise to the direction the fingers moved, regardless of natural scrolling.
+        if !began {
+            began = true
+            onSwipeBegan?()
+        }
         let fingerDX = event.isDirectionInvertedFromDevice ? event.scrollingDeltaX : -event.scrollingDeltaX
         travelled += fingerDX
-        if !fired && abs(travelled) > threshold {
-            fired = true
-            // Fingers moving left reveals the next note, like turning a page.
-            onSwipe?(travelled < 0 ? 1 : -1)
+        samples.append((event.timestamp, travelled))
+        samples.removeAll { event.timestamp - $0.time > 0.08 }
+
+        if event.phase.contains(.ended) || event.phase.contains(.cancelled) {
+            onSwipeEnded?(velocity())
+            began = false
+        } else {
+            onSwipeChanged?(travelled)
         }
+    }
+
+    /// Finger speed over the last ~80ms, so a quick flick counts even if short.
+    private func velocity() -> CGFloat {
+        guard let first = samples.first, let last = samples.last, last.time > first.time else { return 0 }
+        return (last.travelled - first.travelled) / CGFloat(last.time - first.time)
     }
 }
