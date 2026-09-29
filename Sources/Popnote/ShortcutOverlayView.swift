@@ -1,6 +1,6 @@
 import AppKit
 
-/// Hold ⌘ for a moment and this lists every shortcut. Pressing a key while
+/// Hold ⌘ briefly (0.3s) and this lists every shortcut. Pressing a key while
 /// still holding ⌘ runs it as usual; letting go hides the list. It ignores
 /// the mouse, so it never gets in the way.
 final class ShortcutOverlayView: NSView {

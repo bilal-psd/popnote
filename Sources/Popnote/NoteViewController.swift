@@ -318,7 +318,7 @@ final class NoteViewController: NSViewController, NSTextViewDelegate, NSTextFiel
 
     // MARK: Shortcut list (hold ⌘)
 
-    /// Shows the shortcut list when ⌘ is held on its own for half a second.
+    /// Shows the shortcut list when ⌘ is held on its own for a moment.
     /// Any other key or modifier hides it; the key's shortcut still runs.
     private func watchCommandKey() {
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: [.flagsChanged, .keyDown]) { [weak self] event in
@@ -332,7 +332,7 @@ final class NoteViewController: NSViewController, NSTextViewDelegate, NSTextFiel
         let onlyCommand = event.type == .flagsChanged && flags == .command
         guard onlyCommand, view.window?.isKeyWindow == true else { return hideShortcuts() }
         shortcutTimer?.invalidate()
-        shortcutTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: false) { [weak self] _ in
+        shortcutTimer = Timer.scheduledTimer(withTimeInterval: 0.3, repeats: false) { [weak self] _ in
             self?.showShortcuts()
         }
     }
