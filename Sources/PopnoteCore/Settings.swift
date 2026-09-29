@@ -23,6 +23,8 @@ public enum Settings {
         public static let hotkeyKeyCode = "hotkeyKeyCode"
         public static let hotkeyModifiers = "hotkeyModifiers"
         public static let hotkeyLabel = "hotkeyLabel"
+        public static let reminderEnabled = "reminderEnabled"
+        public static let reminderMinutes = "reminderMinutes"
         static let lastNoteID = "lastNoteID"
         /// Renamed first-line keywords, from before keywords were removed.
         static let legacyKeywords = ["keywordList", "keywordCode", "keywordPin"]
@@ -37,6 +39,7 @@ public enum Settings {
         public static let hotkeyKeyCode = 35
         public static let hotkeyModifiers = 2048
         public static let hotkeyLabel = "⌥P"
+        public static let reminderMinutes = 30.0
     }
 
     private static var defaults: UserDefaults { .standard }
@@ -99,6 +102,23 @@ public enum Settings {
     public static var hotkeyKeyCode: Int { defaults.object(forKey: Key.hotkeyKeyCode) as? Int ?? Default.hotkeyKeyCode }
     public static var hotkeyModifiers: Int { defaults.object(forKey: Key.hotkeyModifiers) as? Int ?? Default.hotkeyModifiers }
     public static var hotkeyLabel: String { string(Key.hotkeyLabel) ?? Default.hotkeyLabel }
+
+    // MARK: Reminder
+
+    /// Pops the panel up again on a timer after it's closed. Off by default.
+    public static var reminderEnabled: Bool {
+        get { bool(Key.reminderEnabled, false) }
+        set { defaults.set(newValue, forKey: Key.reminderEnabled) }
+    }
+    /// How long after closing the panel it pops back up. Default 30 minutes.
+    public static var reminderInterval: TimeInterval {
+        let minutes = double(Key.reminderMinutes, Default.reminderMinutes)
+        return (min(max(minutes, shortestReminder), reminderMinutesRange.upperBound) * 60).rounded()
+    }
+    /// The quickest preset, 5 seconds (stored in minutes like the rest).
+    public static let shortestReminder = 5.0 / 60
+    /// Custom intervals Settings accepts: 1 minute to 24 hours.
+    public static let reminderMinutesRange = 1.0...1440.0
 
     // MARK: State
 

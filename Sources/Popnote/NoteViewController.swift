@@ -450,6 +450,9 @@ final class NoteViewController: NSViewController, NSTextViewDelegate, NSTextFiel
         case #selector(toggleKeepOnTop(_:)):
             item.state = Settings.keepOnTop ? .on : .off
             return true
+        case #selector(toggleReminder(_:)):
+            item.state = Settings.reminderEnabled ? .on : .off
+            return true
         case #selector(deleteNote(_:)):
             return current != nil
         default:
@@ -462,6 +465,12 @@ final class NoteViewController: NSViewController, NSTextViewDelegate, NSTextFiel
         Settings.keepOnTop.toggle()
         updateStatus()
         cornerInfo.flash(Settings.keepOnTop ? "keeping on top" : "no longer on top")
+    }
+
+    /// Turns the pop-up timer on or off; the app restarts or stops it.
+    @objc func toggleReminder(_ sender: Any?) {
+        Settings.reminderEnabled.toggle()
+        cornerInfo.flash(Settings.reminderEnabled ? "pop-up timer on" : "pop-up timer off")
     }
 
     // MARK: Search

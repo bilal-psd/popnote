@@ -13,7 +13,7 @@ final class ShortcutOverlayView: NSView {
         ]),
         ("editing", [
             ("C", "copy note"), ("↩", "check / uncheck"), ("= −", "text size"),
-            ("T", "keep on top"), (",", "settings"), ("W", "close"), ("Q", "quit"),
+            ("T", "keep on top"), ("R", "pop-up timer"), (",", "settings"), ("W", "close"), ("Q", "quit"),
         ]),
     ]
 

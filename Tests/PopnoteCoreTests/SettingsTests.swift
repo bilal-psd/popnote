@@ -20,3 +20,19 @@ import Testing
     #expect(Settings.legacyKeywords == nil)
     #expect(defaults.object(forKey: "keywordPin") == nil)
 }
+
+@Test func reminderIntervalStaysInRange() {
+    let defaults = UserDefaults.standard
+    defer { defaults.removeObject(forKey: Settings.Key.reminderMinutes) }
+
+    defaults.removeObject(forKey: Settings.Key.reminderMinutes)
+    #expect(Settings.reminderInterval == 30 * 60)
+    defaults.set(45.0, forKey: Settings.Key.reminderMinutes)
+    #expect(Settings.reminderInterval == 45 * 60)
+    defaults.set(Settings.shortestReminder, forKey: Settings.Key.reminderMinutes)
+    #expect(Settings.reminderInterval == 5)
+    defaults.set(0.0, forKey: Settings.Key.reminderMinutes)
+    #expect(Settings.reminderInterval == 5)
+    defaults.set(100_000.0, forKey: Settings.Key.reminderMinutes)
+    #expect(Settings.reminderInterval == 1440 * 60)
+}

@@ -25,6 +25,10 @@ private struct GeneralSettings: View {
     @AppStorage(Key.expiryHours) private var expiryHours = PopnoteCore.Settings.Default.expiryHours
     @AppStorage(Key.trashDays) private var trashDays = PopnoteCore.Settings.Default.trashDays
     @AppStorage(Key.checkedItems) private var checkedItems = CheckedBehavior.keep.rawValue
+    @AppStorage(Key.reminderEnabled) private var reminderEnabled = false
+    @AppStorage(Key.reminderMinutes) private var reminderMinutes = PopnoteCore.Settings.Default.reminderMinutes
+    @State private var customReminder = !reminderPresets.contains(
+        UserDefaults.standard.object(forKey: Key.reminderMinutes) as? Double ?? PopnoteCore.Settings.Default.reminderMinutes)
     @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
     @State private var loginError: String?
 
@@ -49,6 +53,29 @@ private struct GeneralSettings: View {
                 }
             }
             Section {
+                Toggle(isOn: $reminderEnabled) {
+                    Text("Pop up the note on a timer")
+                    Text("Opens Popnote again this long after you close it. ⌘R toggles this.")
+                }
+                Picker("Every", selection: reminderChoice) {
+                    ForEach(Self.reminderPresets, id: \.self) { Text(Self.duration($0)).tag($0) }
+                    Divider()
+                    Text("Custom…").tag(Self.custom)
+                }
+                .disabled(!reminderEnabled)
+                if customReminder {
+                    LabeledContent("Minutes") {
+                        HStack {
+                            TextField("Minutes", value: customMinutes, format: .number)
+                                .labelsHidden().multilineTextAlignment(.trailing).frame(width: 60)
+                            Stepper("Minutes", value: customMinutes,
+                                    in: PopnoteCore.Settings.reminderMinutesRange).labelsHidden()
+                        }
+                    }
+                    .disabled(!reminderEnabled)
+                }
+            }
+            Section {
                 HotkeyRecorder()
                 Toggle("Open at login", isOn: $launchAtLogin)
                     .onChange(of: launchAtLogin) { _, enabled in setLaunchAtLogin(enabled) }
@@ -60,6 +87,41 @@ private struct GeneralSettings: View {
             }
         }
         .formStyle(.grouped)
+    }
+
+    private static let reminderPresets = [PopnoteCore.Settings.shortestReminder, 15.0, 30.0, 60.0, 120.0]
+    /// The picker's tag for "Custom…"; never a stored interval.
+    private static let custom = -1.0
+
+    /// A preset, or "Custom…" once picked or when the stored interval isn't a preset.
+    private var reminderChoice: Binding<Double> {
+        Binding {
+            customReminder ? Self.custom : reminderMinutes
+        } set: { choice in
+            if choice != Self.custom {
+                customReminder = false
+                reminderMinutes = choice
+            } else if !customReminder {
+                // Custom starts from the default, not whichever preset was picked last.
+                customReminder = true
+                reminderMinutes = PopnoteCore.Settings.Default.reminderMinutes
+            }
+        }
+    }
+
+    /// Whole minutes, kept within the range the timer accepts.
+    private var customMinutes: Binding<Double> {
+        Binding {
+            reminderMinutes
+        } set: { minutes in
+            let range = PopnoteCore.Settings.reminderMinutesRange
+            reminderMinutes = min(max(minutes.rounded(), range.lowerBound), range.upperBound)
+        }
+    }
+
+    private static func duration(_ minutes: Double) -> String {
+        minutes < 1 ? "\(Int((minutes * 60).rounded())) seconds"
+            : minutes < 60 ? "\(Int(minutes)) minutes" : minutes == 60 ? "1 hour" : "\(Int(minutes / 60)) hours"
     }
 
     private func setLaunchAtLogin(_ enabled: Bool) {

@@ -11,12 +11,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var settingsWindow: SettingsWindowController?
     private var welcomeWindow: WelcomeWindowController?
     private var sweepTimer: Timer?
+    private var reminderTimer: Timer?
 
     /// The settings as last applied, so unrelated defaults writes are ignored.
     private struct Applied: Equatable {
         var theme = "", paper = "", font: String? = nil, textSize = 0.0, translucent = false
         var showInDock = false, showInMenuBar = false, keepOnTop = false
         var hotkeyKeyCode = -1, hotkeyModifiers = -1
+        var reminderEnabled = false, reminderInterval = 0.0
     }
     private var applied: Applied?
 
@@ -90,7 +92,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let now = Applied(theme: Settings.theme, paper: Settings.paper, font: Settings.font, textSize: Settings.textSize,
                           translucent: Settings.translucent, showInDock: Settings.showInDock,
                           showInMenuBar: Settings.showInMenuBar, keepOnTop: Settings.keepOnTop,
-                          hotkeyKeyCode: Settings.hotkeyKeyCode, hotkeyModifiers: Settings.hotkeyModifiers)
+                          hotkeyKeyCode: Settings.hotkeyKeyCode, hotkeyModifiers: Settings.hotkeyModifiers,
+                          reminderEnabled: Settings.reminderEnabled, reminderInterval: Settings.reminderInterval)
         guard now != applied else { return }
         let previous = applied
         applied = now
@@ -108,6 +111,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
         if now.hotkeyKeyCode != previous?.hotkeyKeyCode || now.hotkeyModifiers != previous?.hotkeyModifiers {
             scheduleHotKeyUpdate()
+        }
+        if now.reminderEnabled != previous?.reminderEnabled || now.reminderInterval != previous?.reminderInterval {
+            // Counts from now; while the panel is open it waits for it to close.
+            if panel.isVisible { reminderTimer?.invalidate() } else { scheduleReminder() }
+        }
+    }
+
+    /// Starts the countdown to popping the panel back up, if the reminder is on.
+    private func scheduleReminder() {
+        reminderTimer?.invalidate()
+        reminderTimer = nil
+        guard Settings.reminderEnabled else { return }
+        reminderTimer = Timer.scheduledTimer(withTimeInterval: Settings.reminderInterval, repeats: false) { [weak self] _ in
+            guard let self else { return }
+            showPanel()
+            // Only here: opening it yourself needs no fanfare.
+            GlowWindow.flash(around: panel, color: Theme.named(Settings.theme).accent)
         }
     }
 
@@ -180,6 +200,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     @objc func showPanel() {
+        reminderTimer?.invalidate() // restarts when the panel closes
         let wasVisible = panel.isVisible
         // Also when the panel stayed up (kept on top) while another app was in
         // front: esc should go back to that app, not the one from last time.
@@ -263,6 +284,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     /// Fades out (if animating), then orders the panel out.
     private func dismissPanel(then completion: (() -> Void)? = nil) {
         guard panel.isVisible, !isHiding else { return }
+        scheduleReminder()
         guard Settings.animateWindow else {
             panel.orderOut(nil)
             completion?()
@@ -327,8 +349,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     /// Clicking another app or the desktop hides the panel. Popnote's own
     /// Settings and Trash windows don't count, since they keep the app active.
     func applicationDidResignActive(_ notification: Notification) {
+        // Leaving Popnote starts the pop-up countdown, even when the panel
+        // stays open behind other windows or the app was hidden from the
+        // Dock. A panel kept on top is still in sight, so it doesn't count.
+        guard let panel else { return } // the database failed to open; quitting
+        if !(panel.isVisible && Settings.keepOnTop) { scheduleReminder() }
         guard Settings.hideOnClickOutside, !Settings.keepOnTop, panel.attachedSheet == nil else { return }
         dismissPanel()
+    }
+
+    /// Back in the panel (e.g. clicking it behind other windows): no need to pop it up.
+    func applicationDidBecomeActive(_ notification: Notification) {
+        if panel?.isVisible == true { reminderTimer?.invalidate() }
     }
 
     @objc func newNoteFromMenuBar(_ sender: Any?) {
@@ -424,6 +456,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         note.addItem(.separator())
         note.addItem(.separator())
         note.addItem(item("Keep on Top", #selector(NoteViewController.toggleKeepOnTop(_:)), "t", target: noteController))
+        note.addItem(item("Pop Up on a Timer", #selector(NoteViewController.toggleReminder(_:)), "r", target: noteController))
         note.addItem(item("Close", #selector(closeWindow(_:)), "w", target: self))
         addSubmenu(note, to: main)
 

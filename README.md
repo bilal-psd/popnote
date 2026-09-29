@@ -10,6 +10,7 @@ Popnote lives in the menu bar. Press <kbd>⌥P</kbd> from any app and a small no
 
 - **Throwaway by default.** Unpinned notes delete themselves 3 days after you last edited them. Press <kbd>⌘P</kbd> to pin one and keep it.
 - **Checklists.** Type `[] ` to start a checkbox, `- ` for a bullet or `1. ` for a numbered list. <kbd>⌘↩</kbd> checks an item off.
+- **Gentle reminders.** Optionally have the note pop back up every so often, so what you jotted down doesn't slip your mind. <kbd>⌘R</kbd> turns it on or off.
 - **Keyboard first.** Hold <kbd>⌘</kbd> for a moment in a note to see every shortcut.
 - **Plain text.** Notes are Markdown under the hood, so anything you copy out reads cleanly anywhere.
 - **Nothing leaves your Mac.** No account, no sync, no network access.
@@ -61,11 +62,12 @@ You only need to do this once. The install script doesn't trigger the warning: m
 | <kbd>⌘↩</kbd> | Check or uncheck an item |
 | <kbd>⌘=</kbd> <kbd>⌘−</kbd> | Bigger or smaller text |
 | <kbd>⌘T</kbd> | Keep on top of other windows |
+| <kbd>⌘R</kbd> | Turn the pop-up timer on or off |
 | <kbd>⌘,</kbd> | Settings |
 
 In a list, <kbd>↩</kbd> continues it, <kbd>↩</kbd> on an empty item ends it, and <kbd>⇥</kbd> / <kbd>⇧⇥</kbd> indent and outdent.
 
-Settings let you change the hotkey, how long notes last, the theme (Tokyo Night, Gruvbox, Catppuccin, Solarized, Nord or the system colours), where the window opens, and whether Popnote opens at login or shows in the Dock.
+Settings let you change the hotkey, how long notes last, the theme (Tokyo Night, Gruvbox, Catppuccin, Solarized, Nord or the system colours), where the window opens, whether Popnote opens at login or shows in the Dock, and an optional timer that pops the note back up (off by default; every 30 minutes once turned on).
 
 Deleted notes go to Trash for 7 days, so an accidental delete or an expired note can still be brought back from <kbd>⌘O</kbd> › Trash.
 
