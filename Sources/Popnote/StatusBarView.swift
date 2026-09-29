@@ -1,11 +1,10 @@
 import AppKit
 import PopnoteCore
 
-/// A vim/tmux-style status line: mode chip, position, expiry on the left;
-/// shortcut hints (or a brief message) on the right.
+/// A vim/tmux-style status line: notes-drawer button, position, expiry on the
+/// left; shortcut hints (or a brief message) on the right.
 final class StatusBarView: NSView {
     struct State {
-        var mode = NoteMode.plain
         var position = ""
         /// "2d 5h" until deletion, or nil when pinned.
         var expiry: String?
@@ -17,20 +16,40 @@ final class StatusBarView: NSView {
     }
 
     var state = State() { didSet { needsDisplay = true } }
-    var theme = Theme.all[0] { didSet { needsDisplay = true } }
+    var theme = Theme.all[0] {
+        didSet {
+            needsDisplay = true
+            drawerButton.theme = theme
+        }
+    }
+    /// Clicked to open the notes drawer.
+    let drawerButton = DrawerButton()
 
     private var message: String?
     private var messageTimer: Timer?
 
     /// The most useful shortcuts, dropped from the end when space runs out.
     private let hints: [(key: String, label: String)] = [
-        ("⌘K", "commands"), ("esc", "close"), ("⌘N", "new"), ("⌘[ ⌘]", "browse"), ("⌘P", "pin"), ("⌘⌫", "trash"),
+        ("⌘K", "commands"), ("esc", "close"), ("⌘O", "notes"), ("⌘N", "new"), ("⌘P", "pin"), ("⌘⌫", "trash"),
     ]
 
     static let height: CGFloat = 24
 
     override var intrinsicContentSize: NSSize { NSSize(width: NSView.noIntrinsicMetric, height: Self.height) }
     override var mouseDownCanMoveWindow: Bool { true }
+
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        addSubview(drawerButton)
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    override func layout() {
+        super.layout()
+        drawerButton.frame = NSRect(x: 0, y: 0, width: drawerButton.preferredWidth(height: bounds.height),
+                                    height: bounds.height)
+    }
 
     /// Shows `text` in place of the hints for a moment.
     func flash(_ text: String) {
@@ -50,28 +69,12 @@ final class StatusBarView: NSView {
         NSRect(x: 0, y: bounds.maxY - 1, width: bounds.width, height: 1).fill()
 
         let font = Fonts.mono(11)
-        let bold = Fonts.mono(11, weight: .bold)
         func text(_ string: String, _ color: NSColor, _ f: NSFont? = nil) -> NSAttributedString {
             NSAttributedString(string: string, attributes: [.font: f ?? font, .foregroundColor: color])
         }
 
-        // Mode chip.
-        let (icon, name): (String, String) = {
-            switch state.mode {
-            case .plain: return (Glyph.note, "NOTE")
-            case .list: return (Glyph.list, "LIST")
-            case .code: return (Glyph.code, "CODE")
-            }
-        }()
-        let chip = text(" \(icon) \(name) ", theme.background, bold)
-        let chipWidth = ceil(chip.size().width)
-        theme.accent.setFill()
-        NSRect(x: 0, y: 0, width: chipWidth, height: bounds.height).fill()
-        drawCentered(chip, x: 0)
-        var x = chipWidth
-        if let separator = Glyph.separatorRight {
-            x += drawSeparator(separator, color: theme.accent, x: x)
-        }
+        // The drawer button draws itself; text starts after it.
+        var x = drawerButton.preferredWidth(height: bounds.height)
 
         // Position, expiry or pin, keep-on-top.
         let left = NSMutableAttributedString(attributedString: text(" \(state.position)", theme.text))
@@ -111,15 +114,56 @@ final class StatusBarView: NSView {
         let height = string.size().height
         string.draw(at: NSPoint(x: x, y: ((bounds.height - height) / 2).rounded()))
     }
+}
 
-    /// Draws a powerline arrow sized to the full bar height. Returns its width.
-    private func drawSeparator(_ glyph: String, color: NSColor, x: CGFloat) -> CGFloat {
+/// The accent-coloured block at the left of the status line. Opens the notes
+/// drawer (same as ⌘O).
+final class DrawerButton: NSView {
+    var onClick: (() -> Void)?
+    var theme = Theme.all[0] { didSet { needsDisplay = true } }
+
+    override var mouseDownCanMoveWindow: Bool { false }
+
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        toolTip = "All notes (⌘O)"
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    private var icon: NSAttributedString {
+        NSAttributedString(string: " \(Glyph.notes) ", attributes: [
+            .font: Fonts.mono(13, weight: .bold), .foregroundColor: theme.background,
+        ])
+    }
+
+    /// Powerline arrow, sized to fill the bar's height.
+    private func separator(height: CGFloat) -> NSAttributedString? {
+        guard let glyph = Glyph.separatorRight else { return nil }
         let probe = Fonts.mono(12)
-        let size = 12 * bounds.height / (probe.ascender - probe.descender)
-        let font = Fonts.mono(size)
-        let string = NSAttributedString(string: glyph, attributes: [.font: font, .foregroundColor: color])
-        string.draw(at: NSPoint(x: x, y: 0))
-        return floor(string.size().width)
+        let size = 12 * height / (probe.ascender - probe.descender)
+        return NSAttributedString(string: glyph, attributes: [.font: Fonts.mono(size), .foregroundColor: theme.accent])
+    }
+
+    func preferredWidth(height: CGFloat) -> CGFloat {
+        ceil(icon.size().width) + 4 + (separator(height: height).map { floor($0.size().width) } ?? 6)
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        let blockWidth = ceil(icon.size().width) + 4
+        theme.accent.setFill()
+        NSRect(x: 0, y: 0, width: blockWidth, height: bounds.height).fill()
+        let size = icon.size()
+        icon.draw(at: NSPoint(x: 2, y: ((bounds.height - size.height) / 2).rounded()))
+        separator(height: bounds.height)?.draw(at: NSPoint(x: blockWidth, y: 0))
+    }
+
+    override func resetCursorRects() {
+        addCursorRect(bounds, cursor: .pointingHand)
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        onClick?()
     }
 }
 

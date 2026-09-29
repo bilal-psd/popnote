@@ -11,13 +11,13 @@ public enum Exporter {
     }
 
     /// First non-empty line without list markers, cut to 60 characters.
-    public static func title(of note: Note, keywords: Keywords = .current) -> String {
+    public static func title(of note: Note, keywords: Keywords = .current, fallback: String = "Popnote note") -> String {
         let line = content(of: note, keywords: keywords)
             .split(separator: "\n")
             .map { Markers.parse(String($0)).content.trimmingCharacters(in: .whitespaces) }
             .first(where: { !$0.isEmpty }) ?? ""
         let title = line.count > 60 ? String(line.prefix(60)).trimmingCharacters(in: .whitespaces) + "…" : line
-        return title.isEmpty ? "Popnote note" : title
+        return title.isEmpty ? fallback : title
     }
 
     /// The title with characters that aren't allowed in file names replaced.

@@ -118,9 +118,7 @@ enum Glyph {
     static var pin: String { Fonts.hasNerdGlyphs ? "\u{F08D}" : "^" }
     static var clock: String { Fonts.hasNerdGlyphs ? "\u{F017}" : "~" }
     static var search: String { Fonts.hasNerdGlyphs ? "\u{F002}" : "/" }
-    static var note: String { Fonts.hasNerdGlyphs ? "\u{F15C}" : "note" }
-    static var list: String { Fonts.hasNerdGlyphs ? "\u{F0CA}" : "list" }
-    static var code: String { Fonts.hasNerdGlyphs ? "\u{F121}" : "code" }
+    static var notes: String { Fonts.hasNerdGlyphs ? "\u{F0C9}" : "=" }
     static var top: String { Fonts.hasNerdGlyphs ? "\u{F0D8}" : "top" }
     /// Powerline separators (solid right, solid left).
     static var separatorRight: String? { Fonts.hasNerdGlyphs ? "\u{E0B0}" : nil }

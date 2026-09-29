@@ -259,6 +259,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
         let note = NSMenu(title: "Note")
         let backspace = String(UnicodeScalar(NSBackspaceCharacter)!)
+        note.addItem(item("All Notes…", #selector(NoteViewController.toggleNotesDrawer(_:)), "o", target: noteController))
         note.addItem(item("New Note", #selector(NoteViewController.newNote(_:)), "n", target: noteController))
         note.addItem(item("Previous Note", #selector(NoteViewController.previousNote(_:)), "[", target: noteController))
         note.addItem(item("Next Note", #selector(NoteViewController.nextNote(_:)), "]", target: noteController))

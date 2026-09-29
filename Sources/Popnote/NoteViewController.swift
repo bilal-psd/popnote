@@ -25,6 +25,8 @@ final class NoteViewController: NSViewController, NSTextViewDelegate, NSTextFiel
     private let searchBar = SearchBarView()
     private let statusBar = StatusBarView()
     private let palette = CommandPaletteView()
+    private let drawer = NotesDrawerView()
+    private let scrim = ScrimView()
     private var theme = Theme.all[0]
 
     private var searchMatchIDs: [Int64] = []
@@ -88,6 +90,19 @@ final class NoteViewController: NSViewController, NSTextViewDelegate, NSTextFiel
             statusBar.heightAnchor.constraint(equalToConstant: StatusBarView.height),
         ])
 
+        statusBar.drawerButton.onClick = { [weak self] in self?.toggleNotesDrawer(nil) }
+        drawer.notes = { [weak self] in self?.notes ?? [] }
+        drawer.currentID = { [weak self] in self?.current?.id }
+        drawer.onOpen = { [weak self] note in self?.open(noteID: note.id) }
+        drawer.onClose = { [weak self] in
+            self?.scrim.isHidden = true
+            self?.focusEditor()
+        }
+        scrim.isHidden = true
+        scrim.onClick = { [weak self] in self?.drawer.close() }
+        root.addSubview(scrim)
+        root.addSubview(drawer)
+
         palette.commands = { [weak self] in self?.allCommands() ?? [] }
         palette.onClose = { [weak self] in self?.focusEditor() }
         root.addSubview(palette)
@@ -100,6 +115,16 @@ final class NoteViewController: NSViewController, NSTextViewDelegate, NSTextFiel
     override func viewDidLayout() {
         super.viewDidLayout()
         if palette.isOpen { palette.layout(in: view.bounds) }
+        if drawer.isOpen { layoutDrawer() }
+    }
+
+    /// Left side, above the status line; the scrim covers the rest.
+    private func layoutDrawer() {
+        let bounds = view.bounds
+        let width = min(max(bounds.width * 0.62, 220), 320)
+        let height = bounds.height - StatusBarView.height
+        drawer.frame = NSRect(x: 0, y: StatusBarView.height, width: width, height: height)
+        scrim.frame = NSRect(x: width, y: StatusBarView.height, width: bounds.width - width, height: height)
     }
 
     // MARK: State
@@ -137,7 +162,6 @@ final class NoteViewController: NSViewController, NSTextViewDelegate, NSTextFiel
 
     private func updateStatus() {
         var state = StatusBarView.State()
-        state.mode = textView.mode
         state.keepOnTop = Settings.keepOnTop
         if let note = current {
             state.position = "\(index + 1)/\(notes.count)"
@@ -257,6 +281,37 @@ final class NoteViewController: NSViewController, NSTextViewDelegate, NSTextFiel
         updateStatus()
     }
 
+    // MARK: Notes drawer
+
+    @objc func toggleNotesDrawer(_ sender: Any?) {
+        if drawer.isOpen {
+            drawer.close()
+            return
+        }
+        palette.close()
+        if !searchBar.isHidden { closeSearch() }
+        layoutDrawer()
+        scrim.isHidden = false
+        drawer.open()
+        // Slide in from the left.
+        let final = drawer.frame
+        drawer.frame.origin.x = -final.width
+        scrim.alphaValue = 0
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.14
+            context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            drawer.animator().frame = final
+            scrim.animator().alphaValue = 1
+        }
+    }
+
+    /// Jumps to a note chosen in the drawer.
+    private func open(noteID: Int64) {
+        guard let target = notes.firstIndex(where: { $0.id == noteID }) else { return }
+        go(to: target)
+        focusEditor()
+    }
+
     // MARK: Command palette
 
     @objc func toggleCommandPalette(_ sender: Any?) {
@@ -264,6 +319,7 @@ final class NoteViewController: NSViewController, NSTextViewDelegate, NSTextFiel
             palette.close()
         } else {
             if !searchBar.isHidden { closeSearch() }
+            drawer.close()
             palette.open()
         }
     }
@@ -271,6 +327,7 @@ final class NoteViewController: NSViewController, NSTextViewDelegate, NSTextFiel
     private func allCommands() -> [Command] {
         let editor = textView
         var commands = [
+            Command("All notes", "⌘O") { [weak self] in self?.toggleNotesDrawer(nil) },
             Command("New note", "⌘N") { [weak self] in self?.newNote(nil) },
             Command("Previous note", "⌘[") { [weak self] in self?.previousNote(nil) },
             Command("Next note", "⌘]") { [weak self] in self?.nextNote(nil) },
@@ -343,6 +400,7 @@ final class NoteViewController: NSViewController, NSTextViewDelegate, NSTextFiel
     @objc func toggleSearch(_ sender: Any?) {
         if searchBar.isHidden {
             palette.close()
+            drawer.close()
             searchBar.isHidden = false
             view.window?.makeFirstResponder(searchBar.field)
             (searchBar.field.currentEditor() as? NSTextView)?.insertionPointColor = theme.accent
