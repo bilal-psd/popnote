@@ -114,15 +114,13 @@ public enum Markers {
         return indent + marker(for: .checkbox(checked: false))
     }
 
-    /// Typing this at the end of an unchecked item checks it off.
-    public static let checkKeyword = "/x"
-
-    /// Returns the line with the check keyword removed, or nil if it doesn't apply.
-    public static func strippingCheckKeyword(_ line: String) -> String? {
+    /// An unchecked item ending in the check keyword ("/x" by default) gets checked.
+    /// Returns the line with the keyword removed, or nil if it doesn't apply.
+    public static func strippingCheckKeyword(_ line: String, keyword: String = Keywords.current.check) -> String? {
         let parsed = parse(line)
-        guard parsed.kind == .checkbox(checked: false),
-              parsed.content.lowercased().hasSuffix(checkKeyword) else { return nil }
-        var content = String(parsed.content.dropLast(checkKeyword.count))
+        guard !keyword.isEmpty, parsed.kind == .checkbox(checked: false),
+              parsed.content.lowercased().hasSuffix(keyword) else { return nil }
+        var content = String(parsed.content.dropLast(keyword.count))
         while content.hasSuffix(" ") { content.removeLast() }
         return parsed.indent + marker(for: parsed.kind) + content
     }

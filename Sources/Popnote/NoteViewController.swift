@@ -5,8 +5,9 @@ import PopnoteCore
 ///
 /// Notes are ordered oldest → newest. `index == notes.count` is the blank
 /// draft past the newest note; it only becomes a real note once you type.
-final class NoteViewController: NSViewController, NSTextViewDelegate, NSSearchFieldDelegate {
+final class NoteViewController: NSViewController, NSTextViewDelegate, NSSearchFieldDelegate, NSMenuItemValidation {
     var onHide: (() -> Void)?
+    var onOpenSettings: (() -> Void)?
 
     private let store: NoteStore
     private var notes: [Note] = []
@@ -20,6 +21,10 @@ final class NoteViewController: NSViewController, NSTextViewDelegate, NSSearchFi
     private let expiryLabel = NSTextField(labelWithString: "")
     private var pinButton: NSButton!
     private var deleteButton: NSButton!
+    private var moreButton: NSButton!
+    private let effectView = NSVisualEffectView()
+    private let backgroundView = BackgroundView()
+    private var theme = Theme.named("system")
     private let searchField = NSSearchField()
     private var searchMatchIDs: [Int64] = []
     private var searchCursor = 0
@@ -36,18 +41,26 @@ final class NoteViewController: NSViewController, NSTextViewDelegate, NSSearchFi
     // MARK: Layout
 
     override func loadView() {
-        let root = NSView(frame: NSRect(x: 0, y: 0, width: 380, height: 440))
+        // Blurred desktop (seen only when translucent) under the theme colour.
+        let root = effectView
+        root.frame = NSRect(x: 0, y: 0, width: 380, height: 440)
+        root.material = .popover
+        root.blendingMode = .behindWindow
+        root.state = .active
+        backgroundView.frame = root.bounds
+        backgroundView.autoresizingMask = [.width, .height]
+        root.addSubview(backgroundView)
 
         for label in [positionLabel, expiryLabel] {
             label.font = .systemFont(ofSize: 11)
-            label.textColor = .secondaryLabelColor
         }
         pinButton = iconButton("pin", "Pin (⌘P)", #selector(togglePin(_:)))
         deleteButton = iconButton("trash", "Move to The Void (⌘⌫)", #selector(deleteNote(_:)))
+        moreButton = iconButton("ellipsis.circle", "Export and more", #selector(showMoreMenu(_:)))
 
         let spacer = NSView()
         spacer.setContentHuggingPriority(.init(1), for: .horizontal)
-        let header = NSStackView(views: [positionLabel, spacer, expiryLabel, pinButton, deleteButton])
+        let header = NSStackView(views: [positionLabel, spacer, expiryLabel, pinButton, deleteButton, moreButton])
         header.spacing = 8
         // Leave room for the traffic-light buttons in the transparent title bar.
         header.edgeInsets = NSEdgeInsets(top: 0, left: 78, bottom: 0, right: 12)
@@ -153,7 +166,7 @@ final class NoteViewController: NSViewController, NSTextViewDelegate, NSSearchFi
             expiryLabel.stringValue = pinned ? "pinned" : ""
         }
         pinButton.image = NSImage(systemSymbolName: pinned ? "pin.fill" : "pin", accessibilityDescription: "Pin")
-        pinButton.contentTintColor = pinned ? .controlAccentColor : .secondaryLabelColor
+        pinButton.contentTintColor = pinned ? theme.accent : theme.secondary
         deleteButton.isEnabled = current != nil
     }
 
@@ -243,6 +256,69 @@ final class NoteViewController: NSViewController, NSTextViewDelegate, NSSearchFi
         show()
     }
 
+    // MARK: Appearance
+
+    func applyAppearance(theme: Theme, paper: Paper, fontSize: CGFloat, translucent: Bool) {
+        self.theme = theme
+        backgroundView.color = translucent ? theme.background.withAlphaComponent(0.55) : theme.background
+        textView.applyAppearance(theme: theme, paper: paper, fontSize: fontSize)
+        for label in [positionLabel, expiryLabel] { label.textColor = theme.secondary }
+        for button in [deleteButton, moreButton] { button?.contentTintColor = theme.secondary }
+        updateHeader()
+    }
+
+    // MARK: Export and more
+
+    @objc private func showMoreMenu(_ sender: NSButton) {
+        let menu = NSMenu()
+        func add(_ title: String, _ action: Selector) {
+            let item = NSMenuItem(title: title, action: action, keyEquivalent: "")
+            item.target = self
+            menu.addItem(item)
+        }
+        add("Copy Note Text", #selector(copyNoteText(_:)))
+        menu.addItem(.separator())
+        add("Save as Text…", #selector(saveAsText(_:)))
+        add("Save as Markdown…", #selector(saveAsMarkdown(_:)))
+        add("Save as PDF…", #selector(saveAsPDF(_:)))
+        menu.addItem(.separator())
+        add("Send to Apple Notes", #selector(sendToAppleNotes(_:)))
+        add("Send to Obsidian", #selector(sendToObsidian(_:)))
+        add("Send to Bear", #selector(sendToBear(_:)))
+        menu.addItem(.separator())
+        add("Keep on Top", #selector(toggleKeepOnTop(_:)))
+        add("Settings…", #selector(openSettings(_:)))
+        menu.popUp(positioning: nil, at: NSPoint(x: 0, y: sender.bounds.height + 4), in: sender)
+    }
+
+    func validateMenuItem(_ item: NSMenuItem) -> Bool {
+        switch item.action {
+        case #selector(toggleKeepOnTop(_:)):
+            item.state = Settings.keepOnTop ? .on : .off
+            return true
+        case #selector(copyNoteText(_:)), #selector(saveAsText(_:)), #selector(saveAsMarkdown(_:)),
+             #selector(saveAsPDF(_:)), #selector(sendToAppleNotes(_:)), #selector(sendToObsidian(_:)),
+             #selector(sendToBear(_:)):
+            return current.map { !$0.isBlank } ?? false
+        case #selector(deleteNote(_:)):
+            return current != nil
+        default:
+            return true
+        }
+    }
+
+    @objc func copyNoteText(_ sender: Any?) { if let note = current { Export.copyText(note) } }
+    @objc func saveAsText(_ sender: Any?) { if let note = current { Export.save(note, as: .text, from: view.window) } }
+    @objc func saveAsMarkdown(_ sender: Any?) { if let note = current { Export.save(note, as: .markdown, from: view.window) } }
+    @objc func saveAsPDF(_ sender: Any?) { if let note = current { Export.save(note, as: .pdf, from: view.window) } }
+    @objc func sendToAppleNotes(_ sender: Any?) { if let note = current { Export.sendToAppleNotes(note) } }
+    @objc func sendToObsidian(_ sender: Any?) { if let note = current { Export.sendToObsidian(note) } }
+    @objc func sendToBear(_ sender: Any?) { if let note = current { Export.sendToBear(note) } }
+
+    /// The app applies this when it sees the setting change.
+    @objc func toggleKeepOnTop(_ sender: Any?) { Settings.keepOnTop.toggle() }
+    @objc func openSettings(_ sender: Any?) { onOpenSettings?() }
+
     // MARK: Search
 
     @objc func toggleSearch(_ sender: Any?) {
@@ -298,5 +374,17 @@ final class NoteViewController: NSViewController, NSTextViewDelegate, NSSearchFi
         textView.setSelectedRange(range)
         textView.scrollRangeToVisible(range)
         textView.showFindIndicator(for: range)
+    }
+}
+
+/// Fills with a colour that follows light/dark mode (layer colours don't).
+final class BackgroundView: NSView {
+    var color: NSColor = .textBackgroundColor {
+        didSet { needsDisplay = true }
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        color.setFill()
+        dirtyRect.fill()
     }
 }

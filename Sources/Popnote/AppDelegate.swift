@@ -1,15 +1,24 @@
 import AppKit
-import Carbon
 import PopnoteCore
 
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var store: NoteStore!
     private var panel: NotePanel!
     private var noteController: NoteViewController!
     private var statusItem: NSStatusItem!
     private var hotKey: HotKey?
     private var voidWindow: VoidWindowController?
+    private var settingsWindow: SettingsWindowController?
     private var sweepTimer: Timer?
+
+    /// The settings as last applied, so unrelated defaults writes are ignored.
+    private struct Applied: Equatable {
+        var theme = "", paper = "", textSize = 0.0, translucent = false
+        var showInDock = false, showInMenuBar = false, keepOnTop = false
+        var hotkeyKeyCode = -1, hotkeyModifiers = -1
+        var keywords = Keywords.standard
+    }
+    private var applied: Applied?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         do {
@@ -25,12 +34,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         noteController = NoteViewController(store: store)
         noteController.onHide = { [weak self] in self?.hidePanel() }
+        noteController.onOpenSettings = { [weak self] in self?.showSettings(nil) }
         panel = NotePanel(contentViewController: noteController)
+        panel.delegate = self
         NSApp.mainMenu = makeMainMenu()
         setUpStatusItem()
-
-        hotKey = HotKey(keyCode: kVK_ANSI_A, modifiers: optionKey) { [weak self] in self?.togglePanel() }
-        if hotKey == nil { NSLog("Popnote: ⌥A is taken by another app; hotkey not registered") }
+        applySettings()
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(applySettings), name: UserDefaults.didChangeNotification, object: nil)
 
         // Expire notes once a minute, and right after the Mac wakes.
         sweepTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in self?.sweep() }
@@ -40,10 +51,54 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         showPanel()
     }
 
+    /// Clicking the Dock icon (when shown) opens the panel.
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        showPanel()
+        return true
+    }
+
     @objc private func sweep() {
         _ = try? store.sweep(ttl: Settings.noteTTL, voidRetention: Settings.voidRetention)
         noteController?.refresh()
         voidWindow?.model.reload()
+    }
+
+    // MARK: Settings
+
+    @objc private func applySettings() {
+        let now = Applied(theme: Settings.theme, paper: Settings.paper, textSize: Settings.textSize,
+                          translucent: Settings.translucent, showInDock: Settings.showInDock,
+                          showInMenuBar: Settings.showInMenuBar, keepOnTop: Settings.keepOnTop,
+                          hotkeyKeyCode: Settings.hotkeyKeyCode, hotkeyModifiers: Settings.hotkeyModifiers,
+                          keywords: Settings.keywords)
+        guard now != applied else { return }
+        let previous = applied
+        applied = now
+
+        noteController.applyAppearance(theme: Theme.named(now.theme), paper: Paper(rawValue: now.paper) ?? .blank,
+                                       fontSize: CGFloat(now.textSize), translucent: now.translucent)
+        panel.isOpaque = !now.translucent
+        panel.backgroundColor = now.translucent ? .clear : Theme.named(now.theme).background
+        panel.level = now.keepOnTop ? .floating : .normal
+        statusItem.isVisible = now.showInMenuBar
+
+        if now.showInDock != previous?.showInDock {
+            NSApp.setActivationPolicy(now.showInDock ? .regular : .accessory)
+            if previous != nil { showPanel() } // switching policy can deactivate the app
+        }
+        if now.hotkeyKeyCode != previous?.hotkeyKeyCode || now.hotkeyModifiers != previous?.hotkeyModifiers {
+            hotKey = nil // unregister the old one first
+            hotKey = HotKey(keyCode: now.hotkeyKeyCode, modifiers: now.hotkeyModifiers) { [weak self] in
+                self?.togglePanel()
+            }
+            if hotKey == nil { NSLog("Popnote: \(Settings.hotkeyLabel) is taken by another app; hotkey not registered") }
+        }
+    }
+
+    @objc func showSettings(_ sender: Any?) {
+        if settingsWindow == nil { settingsWindow = SettingsWindowController() }
+        NSApp.activate(ignoringOtherApps: true)
+        settingsWindow?.showWindow(nil)
     }
 
     // MARK: Panel
@@ -57,6 +112,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc func showPanel() {
+        if Settings.dropdown && !panel.isVisible { positionAsDropdown() }
         NSApp.activate(ignoringOtherApps: true)
         panel.makeKeyAndOrderFront(nil)
         noteController.focusEditor()
@@ -65,7 +121,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Hides the panel and hands focus back to the previous app.
     @objc func hidePanel() {
         panel.orderOut(nil)
-        NSApp.hide(nil)
+        if settingsWindow?.window?.isVisible != true && voidWindow?.window?.isVisible != true {
+            NSApp.hide(nil)
+        }
+    }
+
+    /// Dropdown mode: the panel hangs under the menu bar icon, or at the top
+    /// of the screen if the icon is hidden.
+    private func positionAsDropdown() {
+        var frame = panel.frame
+        if statusItem.isVisible, let button = statusItem.button, let buttonWindow = button.window {
+            let icon = buttonWindow.convertToScreen(button.convert(button.bounds, to: nil))
+            frame.origin = NSPoint(x: icon.midX - frame.width / 2, y: icon.minY - frame.height - 6)
+            if let visible = buttonWindow.screen?.visibleFrame {
+                frame.origin.x = min(max(frame.minX, visible.minX + 8), visible.maxX - frame.width - 8)
+            }
+        } else if let visible = NSScreen.main?.visibleFrame {
+            frame.origin = NSPoint(x: visible.midX - frame.width / 2, y: visible.maxY - frame.height - 6)
+        }
+        panel.setFrame(frame, display: false)
+    }
+
+    /// Dropdown mode hides the panel when you click elsewhere.
+    func windowDidResignKey(_ notification: Notification) {
+        guard Settings.dropdown, !Settings.keepOnTop, panel.attachedSheet == nil else { return }
+        panel.orderOut(nil)
     }
 
     @objc func newNoteFromMenuBar(_ sender: Any?) {
@@ -105,6 +185,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let menu = NSMenu()
         menu.addItem(item("New Note", #selector(newNoteFromMenuBar(_:)), target: self))
         menu.addItem(item("The Void…", #selector(showVoid(_:)), target: self))
+        menu.addItem(item("Settings…", #selector(showSettings(_:)), target: self))
         menu.addItem(.separator())
         menu.addItem(item("Quit Popnote", #selector(NSApplication.terminate(_:)), target: NSApp))
         statusItem.menu = menu
@@ -114,13 +195,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: Main menu
     //
-    // Never visible (Popnote has no dock icon), but it's what makes keyboard
+    // Visible only when Popnote is in the Dock, but always what makes keyboard
     // shortcuts like ⌘C and ⌘P work while the panel is focused.
 
     private func makeMainMenu() -> NSMenu {
         let main = NSMenu()
 
         let appMenu = NSMenu()
+        appMenu.addItem(item("About Popnote", #selector(NSApplication.orderFrontStandardAboutPanel(_:)), target: NSApp))
+        appMenu.addItem(.separator())
+        appMenu.addItem(item("Settings…", #selector(showSettings(_:)), ",", target: self))
+        appMenu.addItem(.separator())
         appMenu.addItem(item("Hide Popnote", #selector(hidePanel), "h", target: self))
         appMenu.addItem(item("Quit Popnote", #selector(NSApplication.terminate(_:)), "q", target: NSApp))
         addSubmenu(appMenu, to: main)
@@ -150,6 +235,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         void.keyEquivalentModifierMask = [.command, .shift]
         note.addItem(void)
         note.addItem(.separator())
+        note.addItem(item("Copy Note Text", #selector(NoteViewController.copyNoteText(_:)), "C", target: noteController))
+        let export = NSMenu(title: "Export")
+        export.addItem(item("Save as Text…", #selector(NoteViewController.saveAsText(_:)), target: noteController))
+        export.addItem(item("Save as Markdown…", #selector(NoteViewController.saveAsMarkdown(_:)), target: noteController))
+        export.addItem(item("Save as PDF…", #selector(NoteViewController.saveAsPDF(_:)), target: noteController))
+        export.addItem(.separator())
+        export.addItem(item("Send to Apple Notes", #selector(NoteViewController.sendToAppleNotes(_:)), target: noteController))
+        export.addItem(item("Send to Obsidian", #selector(NoteViewController.sendToObsidian(_:)), target: noteController))
+        export.addItem(item("Send to Bear", #selector(NoteViewController.sendToBear(_:)), target: noteController))
+        let exportHolder = NSMenuItem(title: "Export", action: nil, keyEquivalent: "")
+        exportHolder.submenu = export
+        note.addItem(exportHolder)
+        note.addItem(.separator())
+        note.addItem(item("Keep on Top", #selector(NoteViewController.toggleKeepOnTop(_:)), "T", target: noteController))
         note.addItem(item("Close", #selector(hidePanel), "w", target: self))
         addSubmenu(note, to: main)
 
@@ -171,7 +270,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func addSubmenu(_ menu: NSMenu, to main: NSMenu) {
-        let holder = NSMenuItem()
+        let holder = NSMenuItem(title: menu.title, action: nil, keyEquivalent: "")
         holder.submenu = menu
         main.addItem(holder)
     }

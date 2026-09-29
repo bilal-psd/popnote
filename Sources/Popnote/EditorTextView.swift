@@ -16,8 +16,11 @@ final class EditorTextView: NSTextView, NSTextStorageDelegate {
     }
     private var decorations: [Decoration] = []
 
-    private let bodyFont = NSFont.systemFont(ofSize: 14)
-    private let codeFont = NSFont.monospacedSystemFont(ofSize: 13, weight: .regular)
+    private(set) var theme = Theme.named("system")
+    private var paper = Paper.blank
+    private var bodyFont = NSFont.systemFont(ofSize: 14)
+    private var codeFont = NSFont.monospacedSystemFont(ofSize: 13, weight: .regular)
+    private var currentFont: NSFont { mode == .code ? codeFont : bodyFont }
     /// Set while we insert text ourselves, so it isn't mistaken for typing.
     private var isApplyingEdit = false
 
@@ -37,6 +40,26 @@ final class EditorTextView: NSTextView, NSTextStorageDelegate {
         isHorizontallyResizable = false
         autoresizingMask = [.width]
         textContainer?.widthTracksTextView = true
+    }
+
+    func applyAppearance(theme: Theme, paper: Paper, fontSize: CGFloat) {
+        self.theme = theme
+        self.paper = paper
+        bodyFont = .systemFont(ofSize: fontSize)
+        codeFont = .monospacedSystemFont(ofSize: fontSize - 1, weight: .regular)
+        insertionPointColor = theme.text
+        guard let textStorage else { return }
+        textStorage.beginEditing()
+        restyle(textStorage)
+        textStorage.endEditing()
+    }
+
+    /// At least as tall as the visible area, so paper lines fill the panel
+    /// and clicking below the text still focuses it.
+    override func setFrameSize(_ newSize: NSSize) {
+        var size = newSize
+        if let visible = enclosingScrollView?.contentSize.height { size.height = max(size.height, visible) }
+        super.setFrameSize(size)
     }
 
     override func cancelOperation(_ sender: Any?) {
@@ -66,14 +89,14 @@ final class EditorTextView: NSTextView, NSTextStorageDelegate {
             }
         }
         let base: [NSAttributedString.Key: Any] = [
-            .font: mode == .code ? codeFont : bodyFont,
-            .foregroundColor: NSColor.textColor,
+            .font: currentFont,
+            .foregroundColor: theme.text,
         ]
         storage.setAttributes(base, range: full)
 
         // Dim the keyword line ("list", "code", "pin").
-        if let keyword = Note.keyword(of: storage.string), Note.keywords.contains(keyword) {
-            storage.addAttribute(.foregroundColor, value: NSColor.tertiaryLabelColor,
+        if let keyword = Note.keyword(of: storage.string), Keywords.current.firstLine.contains(keyword) {
+            storage.addAttribute(.foregroundColor, value: theme.secondary.withAlphaComponent(0.6),
                                  range: text.lineRange(for: NSRange(location: 0, length: 0)))
         }
 
@@ -90,14 +113,14 @@ final class EditorTextView: NSTextView, NSTextStorageDelegate {
                     self.hideMarker(marker, in: storage, width: self.bodyFont.pointSize + 8)
                     found.append(Decoration(range: marker, kind: .checkbox(checked: checked)))
                     if checked {
-                        storage.addAttributes([.foregroundColor: NSColor.secondaryLabelColor,
+                        storage.addAttributes([.foregroundColor: self.theme.secondary,
                                                .strikethroughStyle: NSUnderlineStyle.single.rawValue], range: content)
                     }
                 case .bullet:
-                    self.hideMarker(marker, in: storage, width: 14)
+                    self.hideMarker(marker, in: storage, width: self.bodyFont.pointSize)
                     found.append(Decoration(range: marker, kind: .bullet))
                 case .numbered:
-                    storage.addAttribute(.foregroundColor, value: NSColor.secondaryLabelColor, range: marker)
+                    storage.addAttribute(.foregroundColor, value: self.theme.secondary, range: marker)
                 case .plain:
                     break
                 }
@@ -117,6 +140,7 @@ final class EditorTextView: NSTextView, NSTextStorageDelegate {
     }
 
     override func draw(_ dirtyRect: NSRect) {
+        drawPaper(dirtyRect)
         super.draw(dirtyRect)
         for decoration in decorations {
             let rect = markerRect(decoration.range)
@@ -125,15 +149,31 @@ final class EditorTextView: NSTextView, NSTextStorageDelegate {
             case .checkbox(let checked):
                 let size = min(bodyFont.pointSize + 1, rect.height)
                 let box = NSRect(x: rect.minX + 1, y: rect.midY - size / 2, width: size, height: size)
-                let image = checked
-                    ? symbol("checkmark.square.fill", colors: [.white, .controlAccentColor])
-                    : symbol("square", colors: [.secondaryLabelColor])
-                image?.draw(in: box, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
+                drawCheckbox(in: box, checked: checked)
             case .bullet:
-                let d: CGFloat = 5
-                NSColor.secondaryLabelColor.setFill()
+                let d = (bodyFont.pointSize / 3).rounded()
+                theme.secondary.setFill()
                 NSBezierPath(ovalIn: NSRect(x: rect.minX + 2, y: rect.midY - d / 2, width: d, height: d)).fill()
             }
+        }
+    }
+
+    /// Lined paper has a rule under every line of text; grid adds columns.
+    private func drawPaper(_ dirtyRect: NSRect) {
+        guard paper != .blank, let layoutManager else { return }
+        let step = layoutManager.defaultLineHeight(for: currentFont)
+        let top = textContainerOrigin.y
+        theme.rule.setFill()
+        var y = top + (max(0, ((dirtyRect.minY - top) / step).rounded(.down)) + 1) * step
+        while y <= dirtyRect.maxY + step {
+            NSRect(x: dirtyRect.minX, y: y.rounded() - 1, width: dirtyRect.width, height: 1).fill()
+            y += step
+        }
+        guard paper == .grid else { return }
+        var x = textContainerOrigin.x + (max(0, ((dirtyRect.minX - textContainerOrigin.x) / step).rounded(.down))) * step
+        while x <= dirtyRect.maxX {
+            NSRect(x: x.rounded(), y: dirtyRect.minY, width: 1, height: dirtyRect.height).fill()
+            x += step
         }
     }
 
@@ -144,10 +184,28 @@ final class EditorTextView: NSTextView, NSTextStorageDelegate {
             .offsetBy(dx: textContainerOrigin.x, dy: textContainerOrigin.y)
     }
 
-    private func symbol(_ name: String, colors: [NSColor]) -> NSImage? {
-        let config = NSImage.SymbolConfiguration(pointSize: bodyFont.pointSize, weight: .regular)
-            .applying(NSImage.SymbolConfiguration(paletteColors: colors))
-        return NSImage(systemSymbolName: name, accessibilityDescription: nil)?.withSymbolConfiguration(config)
+    /// Drawn as paths rather than SF Symbols so it stays sharp in PDF export.
+    private func drawCheckbox(in rect: NSRect, checked: Bool) {
+        let box = rect.insetBy(dx: 1, dy: 1)
+        let radius = box.width * 0.22
+        if checked {
+            theme.accent.setFill()
+            NSBezierPath(roundedRect: box, xRadius: radius, yRadius: radius).fill()
+            let tick = NSBezierPath()
+            tick.move(to: NSPoint(x: box.minX + box.width * 0.24, y: box.minY + box.height * 0.52))
+            tick.line(to: NSPoint(x: box.minX + box.width * 0.43, y: box.minY + box.height * 0.72))
+            tick.line(to: NSPoint(x: box.minX + box.width * 0.78, y: box.minY + box.height * 0.3))
+            tick.lineWidth = max(1.5, box.width * 0.13)
+            tick.lineCapStyle = .round
+            tick.lineJoinStyle = .round
+            NSColor.white.setStroke()
+            tick.stroke()
+        } else {
+            let outline = NSBezierPath(roundedRect: box.insetBy(dx: 0.5, dy: 0.5), xRadius: radius, yRadius: radius)
+            outline.lineWidth = 1.2
+            theme.secondary.setStroke()
+            outline.stroke()
+        }
     }
 
     // MARK: Caret

@@ -28,10 +28,7 @@ public struct Note: Identifiable, Equatable {
         return word.isEmpty ? nil : word
     }
 
-    /// First-line words that change how a note behaves.
-    public static let keywords: Set<String> = ["list", "code", "pin"]
-
-    public var isPinnedByKeyword: Bool { keyword == "pin" }
+    public var isPinnedByKeyword: Bool { keyword == Keywords.current.pin }
 
     /// Pinned either by flag or by a "pin" first line. Pinned notes never expire.
     public var isPinned: Bool { pinned || isPinnedByKeyword }
@@ -53,10 +50,10 @@ public enum NoteMode {
     /// "code": monospaced, no markers, paste keeps indentation.
     case code
 
-    public init(text: String) {
+    public init(text: String, keywords: Keywords = .current) {
         switch Note.keyword(of: text) {
-        case "list": self = .list
-        case "code": self = .code
+        case keywords.list: self = .list
+        case keywords.code: self = .code
         default: self = .plain
         }
     }
