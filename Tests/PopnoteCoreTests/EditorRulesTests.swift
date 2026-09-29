@@ -126,3 +126,18 @@ import Testing
     #expect(NoteMode(text: "code\nlet x = 1") == .code)
     #expect(NoteMode(text: "hello") == .plain)
 }
+
+// MARK: Command palette matching
+
+@Test func fuzzyMatchesInOrder() {
+    #expect(Fuzzy.score("nn", in: "New note") != nil)
+    #expect(Fuzzy.score("xyz", in: "New note") == nil)
+    #expect(Fuzzy.score("ton", in: "New note") == nil) // order matters
+}
+
+@Test func fuzzyPrefersWordStarts() {
+    let titles = ["Send to Obsidian", "Save as PDF…", "Pin / unpin note"]
+    #expect(Fuzzy.filter(titles, query: "pin", text: { $0 }).first == "Pin / unpin note")
+    #expect(Fuzzy.filter(titles, query: "sp", text: { $0 }).first == "Save as PDF…")
+    #expect(Fuzzy.filter(titles, query: "", text: { $0 }) == titles)
+}

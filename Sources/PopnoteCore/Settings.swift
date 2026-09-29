@@ -10,6 +10,7 @@ public enum Settings {
         public static let theme = "theme"
         public static let paper = "paper"
         public static let textSize = "textSize"
+        public static let font = "font"
         public static let translucent = "translucent"
         public static let showInDock = "showInDock"
         public static let showInMenuBar = "showInMenuBar"
@@ -75,7 +76,9 @@ public enum Settings {
 
     // MARK: Appearance
 
-    public static var theme: String { string(Key.theme) ?? "system" }
+    public static var theme: String { string(Key.theme) ?? "tokyonight" }
+    /// Font family; nil picks a Nerd Font if one is installed.
+    public static var font: String? { string(Key.font) }
     public static var paper: String { string(Key.paper) ?? "blank" }
     public static var textSize: Double { double(Key.textSize, Default.textSize) }
     public static var translucent: Bool { bool(Key.translucent, false) }

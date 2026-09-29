@@ -16,6 +16,7 @@ struct SettingsView: View {
         }
         .frame(width: 480)
         .fixedSize(horizontal: false, vertical: true)
+        .font(Font(Fonts.mono(12) as CTFont))
     }
 }
 
@@ -81,7 +82,8 @@ private struct GeneralSettings: View {
 // MARK: Appearance
 
 private struct AppearanceSettings: View {
-    @AppStorage(Key.theme) private var theme = "system"
+    @AppStorage(Key.theme) private var theme = Theme.all[0].id
+    @AppStorage(Key.font) private var font = ""
     @AppStorage(Key.paper) private var paper = Paper.blank.rawValue
     @AppStorage(Key.textSize) private var textSize = PopnoteCore.Settings.Default.textSize
     @AppStorage(Key.translucent) private var translucent = false
@@ -90,6 +92,14 @@ private struct AppearanceSettings: View {
         Form {
             Picker("Theme", selection: $theme) {
                 ForEach(Theme.all, id: \.id) { Text($0.name).tag($0.id) }
+            }
+            Picker("Font", selection: $font) {
+                Text("Auto (Nerd Font if installed)").tag("")
+                ForEach(Fonts.installedMonospaced, id: \.self) { Text($0).tag($0) }
+            }
+            if !Fonts.hasNerdGlyphs {
+                Text("Install a Nerd Font (e.g. brew install --cask font-jetbrains-mono-nerd-font) for icons and powerline separators.")
+                    .font(.caption).foregroundStyle(.secondary)
             }
             Picker("Paper", selection: $paper) {
                 ForEach(Paper.allCases, id: \.rawValue) { Text($0.name).tag($0.rawValue) }

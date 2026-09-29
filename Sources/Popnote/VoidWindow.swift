@@ -74,6 +74,7 @@ struct VoidView: View {
             .padding(10)
         }
         .frame(minWidth: 360, minHeight: 280)
+        .font(Font(Fonts.mono(12) as CTFont))
     }
 }
 

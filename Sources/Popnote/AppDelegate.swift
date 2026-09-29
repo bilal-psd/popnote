@@ -13,7 +13,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     /// The settings as last applied, so unrelated defaults writes are ignored.
     private struct Applied: Equatable {
-        var theme = "", paper = "", textSize = 0.0, translucent = false
+        var theme = "", paper = "", font: String? = nil, textSize = 0.0, translucent = false
         var showInDock = false, showInMenuBar = false, keepOnTop = false
         var hotkeyKeyCode = -1, hotkeyModifiers = -1
         var keywords = Keywords.standard
@@ -35,6 +35,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         noteController = NoteViewController(store: store)
         noteController.onHide = { [weak self] in self?.hidePanel() }
         noteController.onOpenSettings = { [weak self] in self?.showSettings(nil) }
+        noteController.appCommands = { [weak self] in self?.appCommands() ?? [] }
         panel = NotePanel(contentViewController: noteController)
         panel.delegate = self
         NSApp.mainMenu = makeMainMenu()
@@ -66,7 +67,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     // MARK: Settings
 
     @objc private func applySettings() {
-        let now = Applied(theme: Settings.theme, paper: Settings.paper, textSize: Settings.textSize,
+        let now = Applied(theme: Settings.theme, paper: Settings.paper, font: Settings.font, textSize: Settings.textSize,
                           translucent: Settings.translucent, showInDock: Settings.showInDock,
                           showInMenuBar: Settings.showInMenuBar, keepOnTop: Settings.keepOnTop,
                           hotkeyKeyCode: Settings.hotkeyKeyCode, hotkeyModifiers: Settings.hotkeyModifiers,
@@ -93,6 +94,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             }
             if hotKey == nil { NSLog("Popnote: \(Settings.hotkeyLabel) is taken by another app; hotkey not registered") }
         }
+    }
+
+    /// Palette commands that live at the app level.
+    private func appCommands() -> [Command] {
+        var commands = [
+            Command("Open the void", "⌘⇧⌫") { [weak self] in self?.showVoid(nil) },
+            Command("Settings", "⌘,") { [weak self] in self?.showSettings(nil) },
+            Command("Bigger text", "⌘=") { [weak self] in self?.biggerText(nil) },
+            Command("Smaller text", "⌘-") { [weak self] in self?.smallerText(nil) },
+            Command("Hide", "esc") { [weak self] in self?.hidePanel() },
+            Command("Quit Popnote", "⌘Q") { NSApp.terminate(nil) },
+        ]
+        for theme in Theme.all where theme.id != Settings.theme {
+            commands.append(Command("Theme: \(theme.name)") {
+                UserDefaults.standard.set(theme.id, forKey: Settings.Key.theme)
+            })
+        }
+        for paper in Paper.allCases where paper.rawValue != Settings.paper {
+            commands.append(Command("Paper: \(paper.name.lowercased())") {
+                UserDefaults.standard.set(paper.rawValue, forKey: Settings.Key.paper)
+            })
+        }
+        commands.append(Command(Settings.translucent ? "Make window opaque" : "Make window translucent") {
+            UserDefaults.standard.set(!Settings.translucent, forKey: Settings.Key.translucent)
+        })
+        return commands
+    }
+
+    @objc func biggerText(_ sender: Any?) { setTextSize(Settings.textSize + 1) }
+    @objc func smallerText(_ sender: Any?) { setTextSize(Settings.textSize - 1) }
+
+    private func setTextSize(_ size: Double) {
+        UserDefaults.standard.set(min(max(size, 10), 24), forKey: Settings.Key.textSize)
     }
 
     @objc func showSettings(_ sender: Any?) {
@@ -220,6 +254,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         edit.addItem(item("Select All", #selector(NSText.selectAll(_:)), "a"))
         edit.addItem(.separator())
         edit.addItem(item("Find…", #selector(NoteViewController.toggleSearch(_:)), "f", target: noteController))
+        edit.addItem(item("Commands…", #selector(NoteViewController.toggleCommandPalette(_:)), "k", target: noteController))
         addSubmenu(edit, to: main)
 
         let note = NSMenu(title: "Note")
@@ -258,6 +293,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         cycle.keyEquivalentModifierMask = [.command, .shift]
         format.addItem(cycle)
         format.addItem(item("Check / Uncheck", #selector(EditorTextView.toggleCheckbox(_:)), "\r"))
+        format.addItem(.separator())
+        format.addItem(item("Bigger", #selector(biggerText(_:)), "=", target: self))
+        format.addItem(item("Smaller", #selector(smallerText(_:)), "-", target: self))
         addSubmenu(format, to: main)
 
         return main

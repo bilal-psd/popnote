@@ -1,13 +1,16 @@
 import AppKit
 import PopnoteCore
 
-/// The note editor: one note at a time, header with position, expiry and pin.
+/// One note at a time: the editor, a vim-style status line, a "/" search
+/// prompt and the ⌘K command palette. Everything is reachable by keyboard.
 ///
 /// Notes are ordered oldest → newest. `index == notes.count` is the blank
 /// draft past the newest note; it only becomes a real note once you type.
-final class NoteViewController: NSViewController, NSTextViewDelegate, NSSearchFieldDelegate, NSMenuItemValidation {
+final class NoteViewController: NSViewController, NSTextViewDelegate, NSTextFieldDelegate, NSMenuItemValidation {
     var onHide: (() -> Void)?
     var onOpenSettings: (() -> Void)?
+    /// App-level commands (themes, The Void, settings…) for the palette.
+    var appCommands: () -> [Command] = { [] }
 
     private let store: NoteStore
     private var notes: [Note] = []
@@ -15,17 +18,15 @@ final class NoteViewController: NSViewController, NSTextViewDelegate, NSSearchFi
     /// Pin pressed on the blank draft; applied when the note is created.
     private var draftPinned = false
 
-    private let scrollView = SwipeScrollView()
-    private let textView = EditorTextView(frame: NSRect(x: 0, y: 0, width: 380, height: 400))
-    private let positionLabel = NSTextField(labelWithString: "")
-    private let expiryLabel = NSTextField(labelWithString: "")
-    private var pinButton: NSButton!
-    private var deleteButton: NSButton!
-    private var moreButton: NSButton!
     private let effectView = NSVisualEffectView()
     private let backgroundView = BackgroundView()
-    private var theme = Theme.named("system")
-    private let searchField = NSSearchField()
+    private let scrollView = SwipeScrollView()
+    private let textView = EditorTextView(frame: NSRect(x: 0, y: 0, width: 400, height: 400))
+    private let searchBar = SearchBarView()
+    private let statusBar = StatusBarView()
+    private let palette = CommandPaletteView()
+    private var theme = Theme.all[0]
+
     private var searchMatchIDs: [Int64] = []
     private var searchCursor = 0
 
@@ -43,34 +44,13 @@ final class NoteViewController: NSViewController, NSTextViewDelegate, NSSearchFi
     override func loadView() {
         // Blurred desktop (seen only when translucent) under the theme colour.
         let root = effectView
-        root.frame = NSRect(x: 0, y: 0, width: 380, height: 440)
+        root.frame = NSRect(x: 0, y: 0, width: 400, height: 460)
         root.material = .popover
         root.blendingMode = .behindWindow
         root.state = .active
         backgroundView.frame = root.bounds
         backgroundView.autoresizingMask = [.width, .height]
         root.addSubview(backgroundView)
-
-        for label in [positionLabel, expiryLabel] {
-            label.font = .systemFont(ofSize: 11)
-        }
-        pinButton = iconButton("pin", "Pin (⌘P)", #selector(togglePin(_:)))
-        deleteButton = iconButton("trash", "Move to The Void (⌘⌫)", #selector(deleteNote(_:)))
-        moreButton = iconButton("ellipsis.circle", "Export and more", #selector(showMoreMenu(_:)))
-
-        let spacer = NSView()
-        spacer.setContentHuggingPriority(.init(1), for: .horizontal)
-        let header = NSStackView(views: [positionLabel, spacer, expiryLabel, pinButton, deleteButton, moreButton])
-        header.spacing = 8
-        // Leave room for the traffic-light buttons in the transparent title bar.
-        header.edgeInsets = NSEdgeInsets(top: 0, left: 78, bottom: 0, right: 12)
-
-        searchField.placeholderString = "Search notes"
-        searchField.delegate = self
-        searchField.isHidden = true
-        let searchRow = NSStackView(views: [searchField])
-        searchRow.edgeInsets = NSEdgeInsets(top: 0, left: 12, bottom: 4, right: 12)
-        searchRow.isHidden = true
 
         textView.configure()
         textView.delegate = self
@@ -79,13 +59,20 @@ final class NoteViewController: NSViewController, NSTextViewDelegate, NSSearchFi
         scrollView.documentView = textView
         scrollView.hasVerticalScroller = true
         scrollView.autohidesScrollers = true
+        scrollView.scrollerStyle = .overlay
         scrollView.drawsBackground = false
+        // The transparent title bar sits over the top of the editor; start below it.
+        scrollView.automaticallyAdjustsContentInsets = false
+        scrollView.contentInsets = NSEdgeInsets(top: 14, left: 0, bottom: 0, right: 0)
         scrollView.onSwipe = { [weak self] direction in
             guard let self else { return }
             direction > 0 ? self.nextNote(nil) : self.previousNote(nil)
         }
 
-        let column = NSStackView(views: [header, searchRow, scrollView])
+        searchBar.field.delegate = self
+        searchBar.isHidden = true
+
+        let column = NSStackView(views: [scrollView, searchBar, statusBar])
         column.orientation = .vertical
         column.spacing = 0
         column.translatesAutoresizingMaskIntoConstraints = false
@@ -95,24 +82,24 @@ final class NoteViewController: NSViewController, NSTextViewDelegate, NSSearchFi
             column.bottomAnchor.constraint(equalTo: root.bottomAnchor),
             column.leadingAnchor.constraint(equalTo: root.leadingAnchor),
             column.trailingAnchor.constraint(equalTo: root.trailingAnchor),
-            header.heightAnchor.constraint(equalToConstant: 28),
-            header.widthAnchor.constraint(equalTo: column.widthAnchor),
-            searchRow.widthAnchor.constraint(equalTo: column.widthAnchor),
             scrollView.widthAnchor.constraint(equalTo: column.widthAnchor),
+            searchBar.widthAnchor.constraint(equalTo: column.widthAnchor),
+            statusBar.widthAnchor.constraint(equalTo: column.widthAnchor),
+            statusBar.heightAnchor.constraint(equalToConstant: StatusBarView.height),
         ])
-        view = root
 
+        palette.commands = { [weak self] in self?.allCommands() ?? [] }
+        palette.onClose = { [weak self] in self?.focusEditor() }
+        root.addSubview(palette)
+
+        view = root
         index = Int.max // no remembered note → open on the blank draft
         reload(keeping: Settings.lastNoteID)
     }
 
-    private func iconButton(_ symbol: String, _ tip: String, _ action: Selector) -> NSButton {
-        let button = NSButton(image: NSImage(systemSymbolName: symbol, accessibilityDescription: tip)!,
-                              target: self, action: action)
-        button.isBordered = false
-        button.toolTip = tip
-        button.contentTintColor = .secondaryLabelColor
-        return button
+    override func viewDidLayout() {
+        super.viewDidLayout()
+        if palette.isOpen { palette.layout(in: view.bounds) }
     }
 
     // MARK: State
@@ -144,30 +131,29 @@ final class NoteViewController: NSViewController, NSTextViewDelegate, NSSearchFi
             textView.setSelectedRange(NSRange(location: (body as NSString).length, length: 0))
             textView.undoManager?.removeAllActions()
         }
-        updateHeader()
+        updateStatus()
         Settings.lastNoteID = current?.id
     }
 
-    private func updateHeader() {
-        let pinned: Bool
+    private func updateStatus() {
+        var state = StatusBarView.State()
+        state.mode = textView.mode
+        state.keepOnTop = Settings.keepOnTop
         if let note = current {
-            positionLabel.stringValue = "\(index + 1) of \(notes.count)"
-            pinned = note.isPinned
-            if note.isPinnedByKeyword && !note.pinned {
-                expiryLabel.stringValue = "pinned by keyword"
-            } else if pinned {
-                expiryLabel.stringValue = "pinned"
-            } else {
-                expiryLabel.stringValue = Expiry.label(for: note, now: Date(), ttl: Settings.noteTTL) ?? ""
-            }
+            state.position = "\(index + 1)/\(notes.count)"
+            state.pinned = note.isPinned
+            state.pinnedByKeyword = note.isPinnedByKeyword && !note.pinned
+            state.expiry = Expiry.remaining(for: note, now: Date(), ttl: Settings.noteTTL)
         } else {
-            positionLabel.stringValue = "New note"
-            pinned = draftPinned
-            expiryLabel.stringValue = pinned ? "pinned" : ""
+            state.position = "new"
+            state.pinned = draftPinned
         }
-        pinButton.image = NSImage(systemSymbolName: pinned ? "pin.fill" : "pin", accessibilityDescription: "Pin")
-        pinButton.contentTintColor = pinned ? theme.accent : theme.secondary
-        deleteButton.isEnabled = current != nil
+        if !searchBar.isHidden {
+            state.right = searchMatchIDs.isEmpty
+                ? (searchBar.field.stringValue.isEmpty ? "↩ next  esc close" : "no matches")
+                : "\(searchCursor + 1)/\(searchMatchIDs.count)  ↩ next  esc close"
+        }
+        statusBar.state = state
     }
 
     func textDidChange(_ notification: Notification) {
@@ -189,7 +175,7 @@ final class NoteViewController: NSViewController, NSTextViewDelegate, NSSearchFi
             index = notes.count - 1
             Settings.lastNoteID = note.id
         }
-        updateHeader()
+        updateStatus()
     }
 
     /// Moves to another note. A blank note you leave behind is deleted outright.
@@ -206,7 +192,7 @@ final class NoteViewController: NSViewController, NSTextViewDelegate, NSSearchFi
         show()
     }
 
-    // MARK: Actions (menu items and buttons)
+    // MARK: Note actions
 
     @objc func previousNote(_ sender: Any?) {
         if index > 0 { go(to: index - 1) }
@@ -229,18 +215,20 @@ final class NoteViewController: NSViewController, NSTextViewDelegate, NSSearchFi
     @objc func togglePin(_ sender: Any?) {
         guard var note = current else {
             draftPinned.toggle()
-            updateHeader()
+            updateStatus()
+            statusBar.flash(draftPinned ? "\(Glyph.pin) pinned" : "unpinned")
             return
         }
         if note.isPinnedByKeyword && !note.pinned {
-            // Pinned by its first line; unpinning means removing that line.
+            statusBar.flash("pinned by \"\(Keywords.current.pin)\" on line 1")
             NSSound.beep()
             return
         }
         note.pinned.toggle()
         try? store.setPinned(id: note.id, note.pinned)
         notes[index] = note
-        updateHeader()
+        updateStatus()
+        statusBar.flash(note.pinned ? "\(Glyph.pin) pinned" : "unpinned")
     }
 
     @objc func deleteNote(_ sender: Any?) {
@@ -254,42 +242,65 @@ final class NoteViewController: NSViewController, NSTextViewDelegate, NSSearchFi
         // Show the next newer note, or the previous one if this was the newest.
         index = notes.isEmpty ? 0 : min(index, notes.count - 1)
         show()
+        if !note.isBlank { statusBar.flash("moved to the void  ⌘⇧⌫ to restore") }
     }
 
     // MARK: Appearance
 
     func applyAppearance(theme: Theme, paper: Paper, fontSize: CGFloat, translucent: Bool) {
         self.theme = theme
-        backgroundView.color = translucent ? theme.background.withAlphaComponent(0.55) : theme.background
+        backgroundView.color = translucent ? theme.background.withAlphaComponent(0.6) : theme.background
         textView.applyAppearance(theme: theme, paper: paper, fontSize: fontSize)
-        for label in [positionLabel, expiryLabel] { label.textColor = theme.secondary }
-        for button in [deleteButton, moreButton] { button?.contentTintColor = theme.secondary }
-        updateHeader()
+        statusBar.theme = theme
+        searchBar.theme = theme
+        palette.theme = theme
+        updateStatus()
     }
 
-    // MARK: Export and more
+    // MARK: Command palette
 
-    @objc private func showMoreMenu(_ sender: NSButton) {
-        let menu = NSMenu()
-        func add(_ title: String, _ action: Selector) {
-            let item = NSMenuItem(title: title, action: action, keyEquivalent: "")
-            item.target = self
-            menu.addItem(item)
+    @objc func toggleCommandPalette(_ sender: Any?) {
+        if palette.isOpen {
+            palette.close()
+        } else {
+            if !searchBar.isHidden { closeSearch() }
+            palette.open()
         }
-        add("Copy Note Text", #selector(copyNoteText(_:)))
-        menu.addItem(.separator())
-        add("Save as Text…", #selector(saveAsText(_:)))
-        add("Save as Markdown…", #selector(saveAsMarkdown(_:)))
-        add("Save as PDF…", #selector(saveAsPDF(_:)))
-        menu.addItem(.separator())
-        add("Send to Apple Notes", #selector(sendToAppleNotes(_:)))
-        add("Send to Obsidian", #selector(sendToObsidian(_:)))
-        add("Send to Bear", #selector(sendToBear(_:)))
-        menu.addItem(.separator())
-        add("Keep on Top", #selector(toggleKeepOnTop(_:)))
-        add("Settings…", #selector(openSettings(_:)))
-        menu.popUp(positioning: nil, at: NSPoint(x: 0, y: sender.bounds.height + 4), in: sender)
     }
+
+    private func allCommands() -> [Command] {
+        let editor = textView
+        var commands = [
+            Command("New note", "⌘N") { [weak self] in self?.newNote(nil) },
+            Command("Previous note", "⌘[") { [weak self] in self?.previousNote(nil) },
+            Command("Next note", "⌘]") { [weak self] in self?.nextNote(nil) },
+            Command("Newest note", "⌘0") { [weak self] in self?.jumpToNewest(nil) },
+            Command(current?.isPinned == true || (current == nil && draftPinned) ? "Unpin note" : "Pin note", "⌘P") {
+                [weak self] in self?.togglePin(nil)
+            },
+            Command("Move note to the void", "⌘⌫") { [weak self] in self?.deleteNote(nil) },
+            Command("Search notes", "⌘F") { [weak self] in self?.toggleSearch(nil) },
+            Command("Cycle line type", "⌘⇧M") { editor.cycleLineType(nil) },
+            Command("Check / uncheck item", "⌘↩") { editor.toggleCheckbox(nil) },
+            Command(Settings.keepOnTop ? "Stop keeping on top" : "Keep on top", "⌘⇧T") { [weak self] in
+                self?.toggleKeepOnTop(nil)
+            },
+        ]
+        if current.map({ !$0.isBlank }) == true {
+            commands += [
+                Command("Copy note text", "⌘⇧C") { [weak self] in self?.copyNoteText(nil) },
+                Command("Save as text…") { [weak self] in self?.saveAsText(nil) },
+                Command("Save as markdown…") { [weak self] in self?.saveAsMarkdown(nil) },
+                Command("Save as PDF…") { [weak self] in self?.saveAsPDF(nil) },
+                Command("Send to Apple Notes") { [weak self] in self?.sendToAppleNotes(nil) },
+                Command("Send to Obsidian") { [weak self] in self?.sendToObsidian(nil) },
+                Command("Send to Bear") { [weak self] in self?.sendToBear(nil) },
+            ]
+        }
+        return commands + appCommands()
+    }
+
+    // MARK: Export and window
 
     func validateMenuItem(_ item: NSMenuItem) -> Bool {
         switch item.action {
@@ -307,7 +318,11 @@ final class NoteViewController: NSViewController, NSTextViewDelegate, NSSearchFi
         }
     }
 
-    @objc func copyNoteText(_ sender: Any?) { if let note = current { Export.copyText(note) } }
+    @objc func copyNoteText(_ sender: Any?) {
+        guard let note = current else { return }
+        Export.copyText(note)
+        statusBar.flash("copied to clipboard")
+    }
     @objc func saveAsText(_ sender: Any?) { if let note = current { Export.save(note, as: .text, from: view.window) } }
     @objc func saveAsMarkdown(_ sender: Any?) { if let note = current { Export.save(note, as: .markdown, from: view.window) } }
     @objc func saveAsPDF(_ sender: Any?) { if let note = current { Export.save(note, as: .pdf, from: view.window) } }
@@ -316,37 +331,45 @@ final class NoteViewController: NSViewController, NSTextViewDelegate, NSSearchFi
     @objc func sendToBear(_ sender: Any?) { if let note = current { Export.sendToBear(note) } }
 
     /// The app applies this when it sees the setting change.
-    @objc func toggleKeepOnTop(_ sender: Any?) { Settings.keepOnTop.toggle() }
+    @objc func toggleKeepOnTop(_ sender: Any?) {
+        Settings.keepOnTop.toggle()
+        updateStatus()
+        statusBar.flash(Settings.keepOnTop ? "keeping on top" : "no longer on top")
+    }
+
     @objc func openSettings(_ sender: Any?) { onOpenSettings?() }
 
     // MARK: Search
 
     @objc func toggleSearch(_ sender: Any?) {
-        if searchField.isHidden {
-            searchField.isHidden = false
-            searchField.superview?.isHidden = false
-            view.window?.makeFirstResponder(searchField)
+        if searchBar.isHidden {
+            palette.close()
+            searchBar.isHidden = false
+            view.window?.makeFirstResponder(searchBar.field)
+            (searchBar.field.currentEditor() as? NSTextView)?.insertionPointColor = theme.accent
+            updateStatus()
         } else {
             closeSearch()
         }
     }
 
     private func closeSearch() {
-        searchField.stringValue = ""
-        searchField.isHidden = true
-        searchField.superview?.isHidden = true
+        searchBar.field.stringValue = ""
+        searchBar.isHidden = true
         searchMatchIDs = []
+        updateStatus()
         focusEditor()
     }
 
     func controlTextDidChange(_ obj: Notification) {
-        let query = searchField.stringValue
+        let query = searchBar.field.stringValue
         // Newest matches first.
         searchMatchIDs = query.isEmpty ? [] : notes.reversed()
             .filter { $0.body.localizedCaseInsensitiveContains(query) }
             .map(\.id)
         searchCursor = 0
         showSearchMatch()
+        updateStatus()
     }
 
     func control(_ control: NSControl, textView: NSTextView, doCommandBy selector: Selector) -> Bool {
@@ -356,6 +379,7 @@ final class NoteViewController: NSViewController, NSTextViewDelegate, NSSearchFi
             guard !searchMatchIDs.isEmpty else { return true }
             searchCursor = (searchCursor + 1) % searchMatchIDs.count
             showSearchMatch()
+            updateStatus()
             return true
         case #selector(NSResponder.cancelOperation(_:)):
             closeSearch()
@@ -369,7 +393,7 @@ final class NoteViewController: NSViewController, NSTextViewDelegate, NSSearchFi
         guard searchCursor < searchMatchIDs.count,
               let target = notes.firstIndex(where: { $0.id == searchMatchIDs[searchCursor] }) else { return }
         go(to: target)
-        let range = (textView.string as NSString).range(of: searchField.stringValue, options: .caseInsensitive)
+        let range = (textView.string as NSString).range(of: searchBar.field.stringValue, options: .caseInsensitive)
         guard range.location != NSNotFound else { return }
         textView.setSelectedRange(range)
         textView.scrollRangeToVisible(range)

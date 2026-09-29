@@ -16,11 +16,12 @@ final class EditorTextView: NSTextView, NSTextStorageDelegate {
     }
     private var decorations: [Decoration] = []
 
-    private(set) var theme = Theme.named("system")
+    private(set) var theme = Theme.all[0]
     private var paper = Paper.blank
-    private var bodyFont = NSFont.systemFont(ofSize: 14)
-    private var codeFont = NSFont.monospacedSystemFont(ofSize: 13, weight: .regular)
-    private var currentFont: NSFont { mode == .code ? codeFont : bodyFont }
+    private var bodyFont = Fonts.mono(14)
+    private var currentFont: NSFont { bodyFont }
+    /// Width of one character cell in the monospaced font.
+    private var cell: CGFloat { (" " as NSString).size(withAttributes: [.font: bodyFont]).width }
     /// Set while we insert text ourselves, so it isn't mistaken for typing.
     private var isApplyingEdit = false
 
@@ -32,7 +33,7 @@ final class EditorTextView: NSTextView, NSTextStorageDelegate {
         allowsUndo = true
         drawsBackground = false
         font = bodyFont
-        textContainerInset = NSSize(width: 12, height: 6)
+        textContainerInset = NSSize(width: 14, height: 12)
         isAutomaticQuoteSubstitutionEnabled = false
         isAutomaticDashSubstitutionEnabled = false
         isAutomaticTextReplacementEnabled = false
@@ -45,9 +46,9 @@ final class EditorTextView: NSTextView, NSTextStorageDelegate {
     func applyAppearance(theme: Theme, paper: Paper, fontSize: CGFloat) {
         self.theme = theme
         self.paper = paper
-        bodyFont = .systemFont(ofSize: fontSize)
-        codeFont = .monospacedSystemFont(ofSize: fontSize - 1, weight: .regular)
-        insertionPointColor = theme.text
+        bodyFont = Fonts.mono(fontSize)
+        insertionPointColor = theme.accent
+        selectedTextAttributes = [.backgroundColor: theme.accent.withAlphaComponent(0.25)]
         guard let textStorage else { return }
         textStorage.beginEditing()
         restyle(textStorage)
@@ -96,7 +97,7 @@ final class EditorTextView: NSTextView, NSTextStorageDelegate {
 
         // Dim the keyword line ("list", "code", "pin").
         if let keyword = Note.keyword(of: storage.string), Keywords.current.firstLine.contains(keyword) {
-            storage.addAttribute(.foregroundColor, value: theme.secondary.withAlphaComponent(0.6),
+            storage.addAttribute(.foregroundColor, value: theme.dim,
                                  range: text.lineRange(for: NSRange(location: 0, length: 0)))
         }
 
@@ -110,17 +111,17 @@ final class EditorTextView: NSTextView, NSTextStorageDelegate {
                 let content = NSRange(location: NSMaxRange(marker), length: NSMaxRange(lineRange) - NSMaxRange(marker))
                 switch parsed.kind {
                 case .checkbox(let checked):
-                    self.hideMarker(marker, in: storage, width: self.bodyFont.pointSize + 8)
+                    self.hideMarker(marker, in: storage, width: self.cell * CGFloat(Glyph.unchecked.count + 1))
                     found.append(Decoration(range: marker, kind: .checkbox(checked: checked)))
                     if checked {
-                        storage.addAttributes([.foregroundColor: self.theme.secondary,
+                        storage.addAttributes([.foregroundColor: self.theme.dim,
                                                .strikethroughStyle: NSUnderlineStyle.single.rawValue], range: content)
                     }
                 case .bullet:
-                    self.hideMarker(marker, in: storage, width: self.bodyFont.pointSize)
+                    self.hideMarker(marker, in: storage, width: self.cell * 2)
                     found.append(Decoration(range: marker, kind: .bullet))
                 case .numbered:
-                    storage.addAttribute(.foregroundColor, value: self.theme.secondary, range: marker)
+                    storage.addAttribute(.foregroundColor, value: self.theme.accent, range: marker)
                 case .plain:
                     break
                 }
@@ -147,13 +148,9 @@ final class EditorTextView: NSTextView, NSTextStorageDelegate {
             guard rect.intersects(dirtyRect) else { continue }
             switch decoration.kind {
             case .checkbox(let checked):
-                let size = min(bodyFont.pointSize + 1, rect.height)
-                let box = NSRect(x: rect.minX + 1, y: rect.midY - size / 2, width: size, height: size)
-                drawCheckbox(in: box, checked: checked)
+                drawGlyph(checked ? Glyph.checked : Glyph.unchecked, color: checked ? theme.ok : theme.dim, in: rect)
             case .bullet:
-                let d = (bodyFont.pointSize / 3).rounded()
-                theme.secondary.setFill()
-                NSBezierPath(ovalIn: NSRect(x: rect.minX + 2, y: rect.midY - d / 2, width: d, height: d)).fill()
+                drawGlyph(Glyph.bullet, color: theme.accent, in: rect)
             }
         }
     }
@@ -184,28 +181,15 @@ final class EditorTextView: NSTextView, NSTextStorageDelegate {
             .offsetBy(dx: textContainerOrigin.x, dy: textContainerOrigin.y)
     }
 
-    /// Drawn as paths rather than SF Symbols so it stays sharp in PDF export.
-    private func drawCheckbox(in rect: NSRect, checked: Bool) {
-        let box = rect.insetBy(dx: 1, dy: 1)
-        let radius = box.width * 0.22
-        if checked {
-            theme.accent.setFill()
-            NSBezierPath(roundedRect: box, xRadius: radius, yRadius: radius).fill()
-            let tick = NSBezierPath()
-            tick.move(to: NSPoint(x: box.minX + box.width * 0.24, y: box.minY + box.height * 0.52))
-            tick.line(to: NSPoint(x: box.minX + box.width * 0.43, y: box.minY + box.height * 0.72))
-            tick.line(to: NSPoint(x: box.minX + box.width * 0.78, y: box.minY + box.height * 0.3))
-            tick.lineWidth = max(1.5, box.width * 0.13)
-            tick.lineCapStyle = .round
-            tick.lineJoinStyle = .round
-            NSColor.white.setStroke()
-            tick.stroke()
-        } else {
-            let outline = NSBezierPath(roundedRect: box.insetBy(dx: 0.5, dy: 0.5), xRadius: radius, yRadius: radius)
-            outline.lineWidth = 1.2
-            theme.secondary.setStroke()
-            outline.stroke()
-        }
+    /// Icons are text in the note's own font. Nerd Font "Mono" icons are squeezed
+    /// into one cell, so they're drawn a little larger, centred on the line.
+    private func drawGlyph(_ glyph: String, color: NSColor, in rect: NSRect) {
+        let scale: CGFloat = Fonts.hasNerdGlyphs ? 1.25 : 1
+        let font = Fonts.mono(bodyFont.pointSize * scale)
+        let string = NSAttributedString(string: glyph, attributes: [.font: font, .foregroundColor: color])
+        let size = string.size()
+        let lineHeight = layoutManager?.defaultLineHeight(for: bodyFont) ?? rect.height
+        string.draw(at: NSPoint(x: rect.minX, y: rect.minY + (lineHeight - size.height) / 2))
     }
 
     // MARK: Caret
