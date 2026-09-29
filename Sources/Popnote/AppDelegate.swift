@@ -34,8 +34,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
         noteController = NoteViewController(store: store)
         noteController.onHide = { [weak self] in self?.hidePanel() }
-        noteController.onOpenSettings = { [weak self] in self?.showSettings(nil) }
-        noteController.appCommands = { [weak self] in self?.appCommands() ?? [] }
+        noteController.onOpenTrash = { [weak self] in self?.showTrash(nil) }
         panel = NotePanel(contentViewController: noteController)
         panel.delegate = self
         NSApp.mainMenu = makeMainMenu()
@@ -94,32 +93,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             }
             if hotKey == nil { NSLog("Popnote: \(Settings.hotkeyLabel) is taken by another app; hotkey not registered") }
         }
-    }
-
-    /// Palette commands that live at the app level.
-    private func appCommands() -> [Command] {
-        var commands = [
-            Command("Open trash", "⌘⇧⌫") { [weak self] in self?.showTrash(nil) },
-            Command("Settings", "⌘,") { [weak self] in self?.showSettings(nil) },
-            Command("Bigger text", "⌘=") { [weak self] in self?.biggerText(nil) },
-            Command("Smaller text", "⌘-") { [weak self] in self?.smallerText(nil) },
-            Command("Close window", "esc") { [weak self] in self?.hidePanel() },
-            Command("Quit Popnote", "⌘Q") { NSApp.terminate(nil) },
-        ]
-        for theme in Theme.all where theme.id != Settings.theme {
-            commands.append(Command("Theme: \(theme.name)") {
-                UserDefaults.standard.set(theme.id, forKey: Settings.Key.theme)
-            })
-        }
-        for paper in Paper.allCases where paper.rawValue != Settings.paper {
-            commands.append(Command("Paper: \(paper.name.lowercased())") {
-                UserDefaults.standard.set(paper.rawValue, forKey: Settings.Key.paper)
-            })
-        }
-        commands.append(Command(Settings.translucent ? "Make window opaque" : "Make window translucent") {
-            UserDefaults.standard.set(!Settings.translucent, forKey: Settings.Key.translucent)
-        })
-        return commands
     }
 
     @objc func biggerText(_ sender: Any?) { setTextSize(Settings.textSize + 1) }
@@ -254,7 +227,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         edit.addItem(item("Select All", #selector(NSText.selectAll(_:)), "a"))
         edit.addItem(.separator())
         edit.addItem(item("Find…", #selector(NoteViewController.toggleSearch(_:)), "f", target: noteController))
-        edit.addItem(item("Commands…", #selector(NoteViewController.toggleCommandPalette(_:)), "k", target: noteController))
         addSubmenu(edit, to: main)
 
         let note = NSMenu(title: "Note")
@@ -267,24 +239,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         note.addItem(.separator())
         note.addItem(item("Pin / Unpin", #selector(NoteViewController.togglePin(_:)), "p", target: noteController))
         note.addItem(item("Move to Trash", #selector(NoteViewController.deleteNote(_:)), backspace, target: noteController))
-        let trash = item("Trash…", #selector(showTrash(_:)), backspace, target: self)
-        trash.keyEquivalentModifierMask = [.command, .shift]
-        note.addItem(trash)
+        note.addItem(item("Trash…", #selector(showTrash(_:)), target: self))
         note.addItem(.separator())
-        note.addItem(item("Copy Note Text", #selector(NoteViewController.copyNoteText(_:)), "C", target: noteController))
-        let export = NSMenu(title: "Export")
-        export.addItem(item("Save as Text…", #selector(NoteViewController.saveAsText(_:)), target: noteController))
-        export.addItem(item("Save as Markdown…", #selector(NoteViewController.saveAsMarkdown(_:)), target: noteController))
-        export.addItem(item("Save as PDF…", #selector(NoteViewController.saveAsPDF(_:)), target: noteController))
-        export.addItem(.separator())
-        export.addItem(item("Send to Apple Notes", #selector(NoteViewController.sendToAppleNotes(_:)), target: noteController))
-        export.addItem(item("Send to Obsidian", #selector(NoteViewController.sendToObsidian(_:)), target: noteController))
-        export.addItem(item("Send to Bear", #selector(NoteViewController.sendToBear(_:)), target: noteController))
-        let exportHolder = NSMenuItem(title: "Export", action: nil, keyEquivalent: "")
-        exportHolder.submenu = export
-        note.addItem(exportHolder)
         note.addItem(.separator())
-        note.addItem(item("Keep on Top", #selector(NoteViewController.toggleKeepOnTop(_:)), "T", target: noteController))
+        note.addItem(item("Keep on Top", #selector(NoteViewController.toggleKeepOnTop(_:)), "t", target: noteController))
         note.addItem(item("Close", #selector(hidePanel), "w", target: self))
         addSubmenu(note, to: main)
 

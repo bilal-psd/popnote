@@ -2,15 +2,14 @@ import AppKit
 import PopnoteCore
 
 /// One note at a time: the editor, a vim-style status line, a "/" search
-/// prompt and the ⌘K command palette. Everything is reachable by keyboard.
+/// prompt, the ⌘O notes drawer, and a shortcut list shown while ⌘ is held.
+/// Everything is reachable by keyboard.
 ///
 /// Notes are ordered oldest → newest. `index == notes.count` is the blank
 /// draft past the newest note; it only becomes a real note once you type.
 final class NoteViewController: NSViewController, NSTextViewDelegate, NSTextFieldDelegate, NSMenuItemValidation {
     var onHide: (() -> Void)?
-    var onOpenSettings: (() -> Void)?
-    /// App-level commands (themes, Trash, settings…) for the palette.
-    var appCommands: () -> [Command] = { [] }
+    var onOpenTrash: (() -> Void)?
 
     private let store: NoteStore
     private var notes: [Note] = []
@@ -24,7 +23,9 @@ final class NoteViewController: NSViewController, NSTextViewDelegate, NSTextFiel
     private let textView = EditorTextView(frame: NSRect(x: 0, y: 0, width: 400, height: 400))
     private let searchBar = SearchBarView()
     private let statusBar = StatusBarView()
-    private let palette = CommandPaletteView()
+    private let shortcuts = ShortcutOverlayView()
+    private var shortcutTimer: Timer?
+    private var keyMonitor: Any?
     private let drawer = NotesDrawerView()
     private let scrim = ScrimView()
     private var theme = Theme.all[0]
@@ -57,6 +58,7 @@ final class NoteViewController: NSViewController, NSTextViewDelegate, NSTextFiel
         textView.configure()
         textView.delegate = self
         textView.onEscape = { [weak self] in self?.onHide?() }
+        textView.onCopiedNote = { [weak self] in self?.statusBar.flash("copied note") }
 
         scrollView.documentView = textView
         scrollView.hasVerticalScroller = true
@@ -94,6 +96,8 @@ final class NoteViewController: NSViewController, NSTextViewDelegate, NSTextFiel
         drawer.notes = { [weak self] in self?.notes ?? [] }
         drawer.currentID = { [weak self] in self?.current?.id }
         drawer.onOpen = { [weak self] note in self?.open(noteID: note.id) }
+        drawer.trashCount = { [weak self] in (try? self?.store.trashedNotes().count) ?? 0 }
+        drawer.onOpenTrash = { [weak self] in self?.onOpenTrash?() }
         drawer.onClose = { [weak self] in
             self?.scrim.isHidden = true
             self?.focusEditor()
@@ -103,9 +107,9 @@ final class NoteViewController: NSViewController, NSTextViewDelegate, NSTextFiel
         root.addSubview(scrim)
         root.addSubview(drawer)
 
-        palette.commands = { [weak self] in self?.allCommands() ?? [] }
-        palette.onClose = { [weak self] in self?.focusEditor() }
-        root.addSubview(palette)
+        shortcuts.isHidden = true
+        root.addSubview(shortcuts)
+        watchCommandKey()
 
         view = root
         index = Int.max // no remembered note → open on the blank draft
@@ -114,7 +118,7 @@ final class NoteViewController: NSViewController, NSTextViewDelegate, NSTextFiel
 
     override func viewDidLayout() {
         super.viewDidLayout()
-        if palette.isOpen { palette.layout(in: view.bounds) }
+        if !shortcuts.isHidden { shortcuts.layout(in: view.bounds) }
         if drawer.isOpen { layoutDrawer() }
     }
 
@@ -266,7 +270,7 @@ final class NoteViewController: NSViewController, NSTextViewDelegate, NSTextFiel
         // Show the next newer note, or the previous one if this was the newest.
         index = notes.isEmpty ? 0 : min(index, notes.count - 1)
         show()
-        if !note.isBlank { statusBar.flash("moved to trash  ⌘⇧⌫ to restore") }
+        if !note.isBlank { statusBar.flash("moved to trash  ⌘O to restore") }
     }
 
     // MARK: Appearance
@@ -277,7 +281,8 @@ final class NoteViewController: NSViewController, NSTextViewDelegate, NSTextFiel
         textView.applyAppearance(theme: theme, paper: paper, fontSize: fontSize)
         statusBar.theme = theme
         searchBar.theme = theme
-        palette.theme = theme
+        drawer.theme = theme
+        shortcuts.theme = theme
         updateStatus()
     }
 
@@ -288,7 +293,6 @@ final class NoteViewController: NSViewController, NSTextViewDelegate, NSTextFiel
             drawer.close()
             return
         }
-        palette.close()
         if !searchBar.isHidden { closeSearch() }
         layoutDrawer()
         scrim.isHidden = false
@@ -312,79 +316,51 @@ final class NoteViewController: NSViewController, NSTextViewDelegate, NSTextFiel
         focusEditor()
     }
 
-    // MARK: Command palette
+    // MARK: Shortcut list (hold ⌘)
 
-    @objc func toggleCommandPalette(_ sender: Any?) {
-        if palette.isOpen {
-            palette.close()
-        } else {
-            if !searchBar.isHidden { closeSearch() }
-            drawer.close()
-            palette.open()
+    /// Shows the shortcut list when ⌘ is held on its own for half a second.
+    /// Any other key or modifier hides it; the key's shortcut still runs.
+    private func watchCommandKey() {
+        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: [.flagsChanged, .keyDown]) { [weak self] event in
+            self?.handleCommandKey(event)
+            return event
         }
     }
 
-    private func allCommands() -> [Command] {
-        let editor = textView
-        var commands = [
-            Command("All notes", "⌘O") { [weak self] in self?.toggleNotesDrawer(nil) },
-            Command("New note", "⌘N") { [weak self] in self?.newNote(nil) },
-            Command("Previous note", "⌘[") { [weak self] in self?.previousNote(nil) },
-            Command("Next note", "⌘]") { [weak self] in self?.nextNote(nil) },
-            Command("Newest note", "⌘0") { [weak self] in self?.jumpToNewest(nil) },
-            Command(current?.isPinned == true || (current == nil && draftPinned) ? "Unpin note" : "Pin note", "⌘P") {
-                [weak self] in self?.togglePin(nil)
-            },
-            Command("Move note to trash", "⌘⌫") { [weak self] in self?.deleteNote(nil) },
-            Command("Search notes", "⌘F") { [weak self] in self?.toggleSearch(nil) },
-            Command("Check / uncheck item", "⌘↩") { editor.toggleCheckbox(nil) },
-            Command(Settings.keepOnTop ? "Stop keeping on top" : "Keep on top", "⌘⇧T") { [weak self] in
-                self?.toggleKeepOnTop(nil)
-            },
-        ]
-        if current.map({ !$0.isBlank }) == true {
-            commands += [
-                Command("Copy note text", "⌘⇧C") { [weak self] in self?.copyNoteText(nil) },
-                Command("Save as text…") { [weak self] in self?.saveAsText(nil) },
-                Command("Save as markdown…") { [weak self] in self?.saveAsMarkdown(nil) },
-                Command("Save as PDF…") { [weak self] in self?.saveAsPDF(nil) },
-                Command("Send to Apple Notes") { [weak self] in self?.sendToAppleNotes(nil) },
-                Command("Send to Obsidian") { [weak self] in self?.sendToObsidian(nil) },
-                Command("Send to Bear") { [weak self] in self?.sendToBear(nil) },
-            ]
+    private func handleCommandKey(_ event: NSEvent) {
+        let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask).subtracting([.capsLock, .function])
+        let onlyCommand = event.type == .flagsChanged && flags == .command
+        guard onlyCommand, view.window?.isKeyWindow == true else { return hideShortcuts() }
+        shortcutTimer?.invalidate()
+        shortcutTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: false) { [weak self] _ in
+            self?.showShortcuts()
         }
-        return commands + appCommands()
     }
 
-    // MARK: Export and window
+    private func showShortcuts() {
+        shortcuts.layout(in: view.bounds)
+        shortcuts.isHidden = false
+    }
+
+    private func hideShortcuts() {
+        shortcutTimer?.invalidate()
+        shortcutTimer = nil
+        shortcuts.isHidden = true
+    }
+
+    // MARK: Window
 
     func validateMenuItem(_ item: NSMenuItem) -> Bool {
         switch item.action {
         case #selector(toggleKeepOnTop(_:)):
             item.state = Settings.keepOnTop ? .on : .off
             return true
-        case #selector(copyNoteText(_:)), #selector(saveAsText(_:)), #selector(saveAsMarkdown(_:)),
-             #selector(saveAsPDF(_:)), #selector(sendToAppleNotes(_:)), #selector(sendToObsidian(_:)),
-             #selector(sendToBear(_:)):
-            return current.map { !$0.isBlank } ?? false
         case #selector(deleteNote(_:)):
             return current != nil
         default:
             return true
         }
     }
-
-    @objc func copyNoteText(_ sender: Any?) {
-        guard let note = current else { return }
-        Export.copyText(note)
-        statusBar.flash("copied to clipboard")
-    }
-    @objc func saveAsText(_ sender: Any?) { if let note = current { Export.save(note, as: .text, from: view.window) } }
-    @objc func saveAsMarkdown(_ sender: Any?) { if let note = current { Export.save(note, as: .markdown, from: view.window) } }
-    @objc func saveAsPDF(_ sender: Any?) { if let note = current { Export.save(note, as: .pdf, from: view.window) } }
-    @objc func sendToAppleNotes(_ sender: Any?) { if let note = current { Export.sendToAppleNotes(note) } }
-    @objc func sendToObsidian(_ sender: Any?) { if let note = current { Export.sendToObsidian(note) } }
-    @objc func sendToBear(_ sender: Any?) { if let note = current { Export.sendToBear(note) } }
 
     /// The app applies this when it sees the setting change.
     @objc func toggleKeepOnTop(_ sender: Any?) {
@@ -393,13 +369,10 @@ final class NoteViewController: NSViewController, NSTextViewDelegate, NSTextFiel
         statusBar.flash(Settings.keepOnTop ? "keeping on top" : "no longer on top")
     }
 
-    @objc func openSettings(_ sender: Any?) { onOpenSettings?() }
-
     // MARK: Search
 
     @objc func toggleSearch(_ sender: Any?) {
         if searchBar.isHidden {
-            palette.close()
             drawer.close()
             searchBar.isHidden = false
             view.window?.makeFirstResponder(searchBar.field)

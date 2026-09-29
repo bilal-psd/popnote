@@ -26,7 +26,6 @@ private struct GeneralSettings: View {
     @AppStorage(Key.expiryHours) private var expiryHours = PopnoteCore.Settings.Default.expiryHours
     @AppStorage(Key.trashDays) private var trashDays = PopnoteCore.Settings.Default.trashDays
     @AppStorage(Key.checkedItems) private var checkedItems = CheckedBehavior.keep.rawValue
-    @AppStorage(Key.obsidianVault) private var obsidianVault = ""
     @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
     @State private var loginError: String?
 
@@ -60,9 +59,6 @@ private struct GeneralSettings: View {
             } footer: {
                 Text("To change other shortcuts, add them for Popnote in System Settings › Keyboard › Keyboard Shortcuts › App Shortcuts, using the menu item's name.")
                     .font(.caption).foregroundStyle(.secondary)
-            }
-            Section("Export") {
-                TextField("Obsidian vault", text: $obsidianVault, prompt: Text("The vault that's open"))
             }
         }
         .formStyle(.grouped)

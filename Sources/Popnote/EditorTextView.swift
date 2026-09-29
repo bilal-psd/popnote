@@ -67,6 +67,19 @@ final class EditorTextView: NSTextView, NSTextStorageDelegate {
         onEscape?()
     }
 
+    /// Called after ⌘C copied the whole note (nothing was selected).
+    var onCopiedNote: (() -> Void)?
+
+    /// ⌘C with nothing selected copies the whole note, minus its keyword line.
+    override func copy(_ sender: Any?) {
+        guard selectedRange().length == 0 else { return super.copy(sender) }
+        let text = NoteText.content(of: Note(id: 0, body: string, createdAt: Date(), updatedAt: Date()))
+        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return NSSound.beep() }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
+        onCopiedNote?()
+    }
+
     // MARK: Styling
 
     /// Restyles on every text change, before layout and before the selection

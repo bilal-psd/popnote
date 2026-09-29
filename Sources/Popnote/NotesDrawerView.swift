@@ -1,12 +1,14 @@
 import AppKit
 import PopnoteCore
 
-/// ⌘O: a drawer listing every note, pinned first, then most recently edited.
-/// Type to filter, ↑/↓ to move, ↩ to open, esc to close.
+/// ⌘O: a drawer listing every note, pinned first, then most recently edited,
+/// with Trash at the bottom. Type to filter, ↑/↓ to move, ↩ to open, esc to close.
 final class NotesDrawerView: NSView, NSTextFieldDelegate {
     var notes: () -> [Note] = { [] }
     var currentID: () -> Int64? = { nil }
     var onOpen: ((Note) -> Void)?
+    var trashCount: () -> Int = { 0 }
+    var onOpenTrash: (() -> Void)?
     var onClose: (() -> Void)?
     var theme = Theme.all[0] {
         didSet { applyTheme() }
@@ -15,6 +17,12 @@ final class NotesDrawerView: NSView, NSTextFieldDelegate {
     private enum Row {
         case header(String)
         case note(Note)
+        case trash(count: Int)
+
+        var isSelectable: Bool {
+            if case .header = self { return false }
+            return true
+        }
     }
 
     private let field = NSTextField()
@@ -71,7 +79,7 @@ final class NotesDrawerView: NSView, NSTextFieldDelegate {
     // MARK: Rows
 
     private var noteRowIndices: [Int] {
-        rows.indices.filter { if case .note = rows[$0] { return true } else { return false } }
+        rows.indices.filter { rows[$0].isSelectable }
     }
 
     private var visibleCount: Int { max(1, Int((bounds.height - listTop - 6) / rowHeight)) }
@@ -86,6 +94,10 @@ final class NotesDrawerView: NSView, NSTextFieldDelegate {
         if !sections.recent.isEmpty {
             rows.append(.header(sections.pinned.isEmpty ? "NOTES" : "RECENT"))
             rows += sections.recent.map(Row.note)
+        }
+        if field.stringValue.trimmingCharacters(in: .whitespaces).isEmpty {
+            if !rows.isEmpty { rows.append(.header("")) }
+            rows.append(.trash(count: trashCount()))
         }
         let noteRows = noteRowIndices
         selected = noteRows.first(where: { row in
@@ -113,9 +125,17 @@ final class NotesDrawerView: NSView, NSTextFieldDelegate {
     }
 
     private func openSelected() {
-        guard rows.indices.contains(selected), case .note(let note) = rows[selected] else { return NSSound.beep() }
-        close()
-        onOpen?(note)
+        guard rows.indices.contains(selected) else { return NSSound.beep() }
+        switch rows[selected] {
+        case .note(let note):
+            close()
+            onOpen?(note)
+        case .trash:
+            close()
+            onOpenTrash?()
+        case .header:
+            NSSound.beep()
+        }
     }
 
     // MARK: Keys and mouse
@@ -139,7 +159,7 @@ final class NotesDrawerView: NSView, NSTextFieldDelegate {
         let point = convert(event.locationInWindow, from: nil)
         guard point.y > listTop else { return }
         let row = Int((point.y - listTop) / rowHeight) + firstVisible
-        guard rows.indices.contains(row), case .note = rows[row] else { return }
+        guard rows.indices.contains(row), rows[row].isSelectable else { return }
         selected = row
         openSelected()
     }
@@ -186,6 +206,18 @@ final class NotesDrawerView: NSView, NSTextFieldDelegate {
             case .header(let title):
                 let header = NSAttributedString(string: title, attributes: [.font: small, .foregroundColor: theme.dim])
                 header.draw(at: NSPoint(x: rect.minX + 8, y: rect.maxY - header.size().height - 3))
+            case .trash(let count):
+                if index == selected {
+                    theme.accent.withAlphaComponent(0.18).setFill()
+                    NSBezierPath(roundedRect: rect, xRadius: 5, yRadius: 5).fill()
+                }
+                let label = NSAttributedString(string: "  \(Glyph.trash) trash", attributes: [
+                    .font: font, .foregroundColor: index == selected ? theme.accent : theme.dim,
+                ])
+                let meta = NSAttributedString(string: "\(count)", attributes: [.font: font, .foregroundColor: theme.dim])
+                let y = rect.minY + (rowHeight - label.size().height) / 2
+                label.draw(at: NSPoint(x: rect.minX + 4, y: y))
+                meta.draw(at: NSPoint(x: rect.maxX - meta.size().width - 8, y: y))
             case .note(let note):
                 let isSelected = index == selected
                 if isSelected {
@@ -197,7 +229,7 @@ final class NotesDrawerView: NSView, NSTextFieldDelegate {
                     attributes: [.font: font, .foregroundColor: note.isPinned ? theme.accent : theme.dim])
                 let metaWidth = meta.size().width
                 let isCurrent = note.id == currentID()
-                let title = Exporter.title(of: note, fallback: "empty note")
+                let title = NoteText.title(of: note)
                 let color = isSelected ? theme.accent : (isCurrent ? theme.text : theme.text.withAlphaComponent(0.85))
                 let titleString = NSAttributedString(string: (isCurrent ? "● " : "  ") + title, attributes: [
                     .font: font, .foregroundColor: color, .paragraphStyle: truncating,

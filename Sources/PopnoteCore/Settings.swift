@@ -23,7 +23,6 @@ public enum Settings {
         public static let keywordCode = "keywordCode"
         public static let keywordPin = "keywordPin"
         public static let keywordCheck = "keywordCheck"
-        public static let obsidianVault = "obsidianVault"
         static let lastNoteID = "lastNoteID"
     }
 
@@ -97,10 +96,6 @@ public enum Settings {
     public static var hotkeyKeyCode: Int { defaults.object(forKey: Key.hotkeyKeyCode) as? Int ?? Default.hotkeyKeyCode }
     public static var hotkeyModifiers: Int { defaults.object(forKey: Key.hotkeyModifiers) as? Int ?? Default.hotkeyModifiers }
     public static var hotkeyLabel: String { string(Key.hotkeyLabel) ?? Default.hotkeyLabel }
-
-    // MARK: Export
-
-    public static var obsidianVault: String? { string(Key.obsidianVault) }
 
     // MARK: State
 
