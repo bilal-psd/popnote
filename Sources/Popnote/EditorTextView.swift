@@ -6,7 +6,7 @@ import PopnoteCore
 final class EditorTextView: NSTextView, NSTextStorageDelegate {
     var onEscape: (() -> Void)?
 
-    private(set) var mode = NoteMode.plain
+    private var mode = NoteMode.plain
 
     private enum DecorationKind { case checkbox(checked: Bool), bullet }
     /// A hidden marker with something drawn in its place.
@@ -19,7 +19,6 @@ final class EditorTextView: NSTextView, NSTextStorageDelegate {
     private(set) var theme = Theme.all[0]
     private var paper = Paper.blank
     private var bodyFont = Fonts.mono(14)
-    private var currentFont: NSFont { bodyFont }
     /// Width of one character cell in the monospaced font.
     private var cell: CGFloat { (" " as NSString).size(withAttributes: [.font: bodyFont]).width }
     /// Set while we insert text ourselves, so it isn't mistaken for typing.
@@ -108,7 +107,7 @@ final class EditorTextView: NSTextView, NSTextStorageDelegate {
             }
         }
         let base: [NSAttributedString.Key: Any] = [
-            .font: currentFont,
+            .font: bodyFont,
             .foregroundColor: theme.text,
         ]
         storage.setAttributes(base, range: full)
@@ -189,7 +188,7 @@ final class EditorTextView: NSTextView, NSTextStorageDelegate {
     /// Lined paper has a rule under every line of text; grid adds columns.
     private func drawPaper(_ dirtyRect: NSRect) {
         guard paper != .blank, let layoutManager else { return }
-        let step = layoutManager.defaultLineHeight(for: currentFont)
+        let step = layoutManager.defaultLineHeight(for: bodyFont)
         let top = textContainerOrigin.y
         theme.rule.setFill()
         var y = top + (max(0, ((dirtyRect.minY - top) / step).rounded(.down)) + 1) * step

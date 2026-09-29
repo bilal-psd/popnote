@@ -6,7 +6,7 @@ struct Theme {
     let id: String
     let name: String
     let background: NSColor
-    /// Status line and command palette.
+    /// Search bar, notes drawer and shortcut list.
     let surface: NSColor
     let text: NSColor
     /// Comments, hints, unchecked boxes.
@@ -81,7 +81,7 @@ enum Fonts {
         }
     }
 
-    /// Resolved once per Settings value; status line redraws call this a lot.
+    /// Resolved once per Settings value; drawing code calls this a lot.
     private static var cached: (choice: String?, family: String?)?
 
     static func family() -> String? {
@@ -116,12 +116,7 @@ enum Glyph {
     static var checked: String { Fonts.hasNerdGlyphs ? "\u{F14A}" : "[x]" }
     static var bullet: String { Fonts.hasNerdGlyphs ? "\u{F444}" : "*" }
     static var pin: String { Fonts.hasNerdGlyphs ? "\u{F08D}" : "^" }
-    static var clock: String { Fonts.hasNerdGlyphs ? "\u{F017}" : "~" }
     static var search: String { Fonts.hasNerdGlyphs ? "\u{F002}" : "/" }
-    static var notes: String { Fonts.hasNerdGlyphs ? "\u{F0C9}" : "=" }
     static var trash: String { Fonts.hasNerdGlyphs ? "\u{F1F8}" : "x" }
     static var top: String { Fonts.hasNerdGlyphs ? "\u{F0D8}" : "top" }
-    /// Powerline separators (solid right, solid left).
-    static var separatorRight: String? { Fonts.hasNerdGlyphs ? "\u{E0B0}" : nil }
-    static var separatorLeft: String? { Fonts.hasNerdGlyphs ? "\u{E0B2}" : nil }
 }

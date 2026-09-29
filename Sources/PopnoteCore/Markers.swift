@@ -29,7 +29,7 @@ public enum NewlineAction: Equatable {
 }
 
 /// Line-level rules for checklists, bullets and numbered lists. Markers live
-/// in the text as Markdown, so notes export cleanly.
+/// in the text as Markdown, so copied notes read cleanly anywhere.
 public enum Markers {
     public static func parse(_ line: String) -> ParsedLine {
         let indent = String(line.prefix(while: { $0 == " " || $0 == "\t" }))

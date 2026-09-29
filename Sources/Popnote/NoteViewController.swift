@@ -139,7 +139,7 @@ final class NoteViewController: NSViewController, NSTextViewDelegate, NSTextFiel
         if drawer.isOpen { layoutDrawer() }
     }
 
-    /// Left side, above the status line; the scrim covers the rest.
+    /// Left side, full height; the scrim covers the rest.
     private func layoutDrawer() {
         let bounds = view.bounds
         let width = min(max(bounds.width * 0.62, 220), 320)

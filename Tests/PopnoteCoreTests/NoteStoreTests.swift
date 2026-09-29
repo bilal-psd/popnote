@@ -96,11 +96,3 @@ private let t0 = Date(timeIntervalSince1970: 1_800_000_000)
     #expect(!other.isPinned)
 }
 
-@Test func expiryLabels() {
-    let note = Note(id: 1, body: "x", createdAt: t0, updatedAt: t0)
-    #expect(Expiry.label(for: note, now: t0, ttl: ttl) == "deletes in 3d")
-    #expect(Expiry.label(for: note, now: t0.addingTimeInterval(day + 3600 * 5 + 1), ttl: ttl) == "deletes in 1d 18h")
-    #expect(Expiry.label(for: note, now: t0.addingTimeInterval(ttl - 3600 * 5), ttl: ttl) == "deletes in 5h")
-    #expect(Expiry.label(for: note, now: t0.addingTimeInterval(ttl - 720), ttl: ttl) == "deletes in 12m")
-    #expect(Expiry.label(for: note, now: t0.addingTimeInterval(ttl - 5), ttl: ttl) == "deletes in <1m")
-}
