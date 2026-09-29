@@ -34,10 +34,10 @@ public enum Settings {
         public static let expiryHours = 72.0
         public static let trashDays = 7.0
         public static let textSize = 14.0
-        /// kVK_ANSI_A and Carbon's optionKey: ⌥A.
-        public static let hotkeyKeyCode = 0
+        /// kVK_ANSI_P and Carbon's optionKey: ⌥P.
+        public static let hotkeyKeyCode = 35
         public static let hotkeyModifiers = 2048
-        public static let hotkeyLabel = "⌥A"
+        public static let hotkeyLabel = "⌥P"
     }
 
     private static var defaults: UserDefaults { .standard }
