@@ -1,8 +1,9 @@
 import AppKit
 import PopnoteCore
 
-/// One note at a time: the editor, a vim-style status line, a "/" search
-/// prompt, the ⌘O notes drawer, and a shortcut list shown while ⌘ is held.
+/// One note at a time: the editor, the note's position in the bottom-right
+/// corner, a "/" search prompt, the ⌘O notes drawer, and a shortcut list
+/// shown while ⌘ is held.
 /// Everything is reachable by keyboard.
 ///
 /// Notes are ordered oldest → newest. `index == notes.count` is the blank
@@ -22,7 +23,7 @@ final class NoteViewController: NSViewController, NSTextViewDelegate, NSTextFiel
     private let scrollView = SwipeScrollView()
     private let textView = EditorTextView(frame: NSRect(x: 0, y: 0, width: 400, height: 400))
     private let searchBar = SearchBarView()
-    private let statusBar = StatusBarView()
+    private let cornerInfo = CornerInfoView()
     private let shortcuts = ShortcutOverlayView()
     private var shortcutTimer: Timer?
     private var keyMonitor: Any?
@@ -58,7 +59,7 @@ final class NoteViewController: NSViewController, NSTextViewDelegate, NSTextFiel
         textView.configure()
         textView.delegate = self
         textView.onEscape = { [weak self] in self?.onHide?() }
-        textView.onCopiedNote = { [weak self] in self?.statusBar.flash("copied note") }
+        textView.onCopiedNote = { [weak self] in self?.cornerInfo.flash("copied note") }
 
         scrollView.documentView = textView
         scrollView.hasVerticalScroller = true
@@ -67,7 +68,8 @@ final class NoteViewController: NSViewController, NSTextViewDelegate, NSTextFiel
         scrollView.drawsBackground = false
         // The transparent title bar sits over the top of the editor; start below it.
         scrollView.automaticallyAdjustsContentInsets = false
-        scrollView.contentInsets = NSEdgeInsets(top: 14, left: 0, bottom: 0, right: 0)
+        // Bottom inset keeps the last line clear of the corner indicator.
+        scrollView.contentInsets = NSEdgeInsets(top: 14, left: 0, bottom: 24, right: 0)
         scrollView.onSwipe = { [weak self] direction in
             guard let self else { return }
             direction > 0 ? self.nextNote(nil) : self.previousNote(nil)
@@ -76,7 +78,7 @@ final class NoteViewController: NSViewController, NSTextViewDelegate, NSTextFiel
         searchBar.field.delegate = self
         searchBar.isHidden = true
 
-        let column = NSStackView(views: [scrollView, searchBar, statusBar])
+        let column = NSStackView(views: [scrollView, searchBar])
         column.orientation = .vertical
         column.spacing = 0
         column.translatesAutoresizingMaskIntoConstraints = false
@@ -88,11 +90,16 @@ final class NoteViewController: NSViewController, NSTextViewDelegate, NSTextFiel
             column.trailingAnchor.constraint(equalTo: root.trailingAnchor),
             scrollView.widthAnchor.constraint(equalTo: column.widthAnchor),
             searchBar.widthAnchor.constraint(equalTo: column.widthAnchor),
-            statusBar.widthAnchor.constraint(equalTo: column.widthAnchor),
-            statusBar.heightAnchor.constraint(equalToConstant: StatusBarView.height),
         ])
 
-        statusBar.drawerButton.onClick = { [weak self] in self?.toggleNotesDrawer(nil) }
+        // Position and pin, bottom-right, above the search bar when it's open.
+        cornerInfo.translatesAutoresizingMaskIntoConstraints = false
+        root.addSubview(cornerInfo)
+        NSLayoutConstraint.activate([
+            cornerInfo.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -14),
+            cornerInfo.bottomAnchor.constraint(equalTo: scrollView.bottomAnchor, constant: -10),
+        ])
+
         drawer.notes = { [weak self] in self?.notes ?? [] }
         drawer.currentID = { [weak self] in self?.current?.id }
         drawer.onOpen = { [weak self] note in self?.open(noteID: note.id) }
@@ -126,9 +133,8 @@ final class NoteViewController: NSViewController, NSTextViewDelegate, NSTextFiel
     private func layoutDrawer() {
         let bounds = view.bounds
         let width = min(max(bounds.width * 0.62, 220), 320)
-        let height = bounds.height - StatusBarView.height
-        drawer.frame = NSRect(x: 0, y: StatusBarView.height, width: width, height: height)
-        scrim.frame = NSRect(x: width, y: StatusBarView.height, width: bounds.width - width, height: height)
+        drawer.frame = NSRect(x: 0, y: 0, width: width, height: bounds.height)
+        scrim.frame = NSRect(x: width, y: 0, width: bounds.width - width, height: bounds.height)
     }
 
     // MARK: State
@@ -165,23 +171,21 @@ final class NoteViewController: NSViewController, NSTextViewDelegate, NSTextFiel
     }
 
     private func updateStatus() {
-        var state = StatusBarView.State()
+        var state = CornerInfoView.State()
         state.keepOnTop = Settings.keepOnTop
         if let note = current {
             state.position = "\(index + 1)/\(notes.count)"
             state.pinned = note.isPinned
-            state.pinnedByKeyword = note.isPinnedByKeyword && !note.pinned
-            state.expiry = Expiry.remaining(for: note, now: Date(), ttl: Settings.noteTTL)
         } else {
             state.position = "new"
             state.pinned = draftPinned
         }
+        cornerInfo.state = state
         if !searchBar.isHidden {
-            state.right = searchMatchIDs.isEmpty
-                ? (searchBar.field.stringValue.isEmpty ? "↩ next  esc close" : "no matches")
-                : "\(searchCursor + 1)/\(searchMatchIDs.count)  ↩ next  esc close"
+            searchBar.matches = searchMatchIDs.isEmpty
+                ? (searchBar.field.stringValue.isEmpty ? "" : "no matches")
+                : "\(searchCursor + 1)/\(searchMatchIDs.count)"
         }
-        statusBar.state = state
     }
 
     func textDidChange(_ notification: Notification) {
@@ -244,11 +248,11 @@ final class NoteViewController: NSViewController, NSTextViewDelegate, NSTextFiel
         guard var note = current else {
             draftPinned.toggle()
             updateStatus()
-            statusBar.flash(draftPinned ? "\(Glyph.pin) pinned" : "unpinned")
+            cornerInfo.flash(draftPinned ? "\(Glyph.pin) pinned" : "unpinned")
             return
         }
         if note.isPinnedByKeyword && !note.pinned {
-            statusBar.flash("pinned by \"\(Keywords.current.pin)\" on line 1")
+            cornerInfo.flash("pinned by \"\(Keywords.current.pin)\" on line 1")
             NSSound.beep()
             return
         }
@@ -256,7 +260,7 @@ final class NoteViewController: NSViewController, NSTextViewDelegate, NSTextFiel
         try? store.setPinned(id: note.id, note.pinned)
         notes[index] = note
         updateStatus()
-        statusBar.flash(note.pinned ? "\(Glyph.pin) pinned" : "unpinned")
+        cornerInfo.flash(note.pinned ? "\(Glyph.pin) pinned" : "unpinned")
     }
 
     @objc func deleteNote(_ sender: Any?) {
@@ -270,7 +274,7 @@ final class NoteViewController: NSViewController, NSTextViewDelegate, NSTextFiel
         // Show the next newer note, or the previous one if this was the newest.
         index = notes.isEmpty ? 0 : min(index, notes.count - 1)
         show()
-        if !note.isBlank { statusBar.flash("moved to trash  ⌘O to restore") }
+        if !note.isBlank { cornerInfo.flash("moved to trash  ⌘O to restore") }
     }
 
     // MARK: Appearance
@@ -279,7 +283,7 @@ final class NoteViewController: NSViewController, NSTextViewDelegate, NSTextFiel
         self.theme = theme
         backgroundView.color = translucent ? theme.background.withAlphaComponent(0.6) : theme.background
         textView.applyAppearance(theme: theme, paper: paper, fontSize: fontSize)
-        statusBar.theme = theme
+        cornerInfo.theme = theme
         searchBar.theme = theme
         drawer.theme = theme
         shortcuts.theme = theme
@@ -366,7 +370,7 @@ final class NoteViewController: NSViewController, NSTextViewDelegate, NSTextFiel
     @objc func toggleKeepOnTop(_ sender: Any?) {
         Settings.keepOnTop.toggle()
         updateStatus()
-        statusBar.flash(Settings.keepOnTop ? "keeping on top" : "no longer on top")
+        cornerInfo.flash(Settings.keepOnTop ? "keeping on top" : "no longer on top")
     }
 
     // MARK: Search

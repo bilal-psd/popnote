@@ -161,6 +161,7 @@ final class EditorTextView: NSTextView, NSTextStorageDelegate {
     override func draw(_ dirtyRect: NSRect) {
         drawPaper(dirtyRect)
         super.draw(dirtyRect)
+        if string.isEmpty { drawEmptyHint() }
         for decoration in decorations {
             let rect = markerRect(decoration.range)
             guard rect.intersects(dirtyRect) else { continue }
@@ -171,6 +172,18 @@ final class EditorTextView: NSTextView, NSTextStorageDelegate {
                 drawGlyph(Glyph.bullet, color: theme.accent, in: rect)
             }
         }
+    }
+
+    /// Shown in an empty note until you type: where to start, and that holding
+    /// ⌘ lists the shortcuts (like Notion's "Press '/' for commands").
+    private func drawEmptyHint() {
+        let faint: [NSAttributedString.Key: Any] = [.font: bodyFont, .foregroundColor: theme.dim.withAlphaComponent(0.7)]
+        let hint = NSMutableAttributedString(string: "start typing  ·  hold ", attributes: faint)
+        hint.append(NSAttributedString(string: "⌘", attributes: [.font: Fonts.mono(bodyFont.pointSize, weight: .bold),
+                                                                  .foregroundColor: theme.dim]))
+        hint.append(NSAttributedString(string: " for shortcuts", attributes: faint))
+        let padding = textContainer?.lineFragmentPadding ?? 0
+        hint.draw(at: NSPoint(x: textContainerOrigin.x + padding, y: textContainerOrigin.y))
     }
 
     /// Lined paper has a rule under every line of text; grid adds columns.
