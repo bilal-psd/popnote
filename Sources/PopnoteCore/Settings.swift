@@ -82,6 +82,8 @@ public enum Settings {
     public static var font: String? { string(Key.font) }
     public static var paper: String { string(Key.paper) ?? "blank" }
     public static var textSize: Double { double(Key.textSize, Default.textSize) }
+    /// Sizes offered by the Settings slider and ⌘= / ⌘−.
+    public static let textSizeRange = 10.0...24.0
     public static var translucent: Bool { bool(Key.translucent, false) }
 
     // MARK: Window

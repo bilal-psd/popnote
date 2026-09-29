@@ -103,7 +103,7 @@ private struct AppearanceSettings: View {
             .pickerStyle(.segmented)
             LabeledContent("Text size") {
                 HStack {
-                    Slider(value: $textSize, in: 11...22, step: 1)
+                    Slider(value: $textSize, in: PopnoteCore.Settings.textSizeRange, step: 1)
                     Text("\(Int(textSize)) pt").monospacedDigit().frame(width: 40, alignment: .trailing)
                 }
             }
@@ -183,16 +183,31 @@ private struct HotkeyRecorder: View {
     @AppStorage(Key.hotkeyModifiers) private var modifiers = PopnoteCore.Settings.Default.hotkeyModifiers
     @AppStorage(Key.hotkeyLabel) private var label = PopnoteCore.Settings.Default.hotkeyLabel
     @State private var monitor: Any?
+    @State private var taken: String?
 
     var body: some View {
-        Button(monitor == nil ? label : "Type shortcut…") {
-            monitor == nil ? start() : stop()
+        VStack(alignment: .trailing, spacing: 2) {
+            Button(monitor == nil ? label : "Type shortcut…") {
+                monitor == nil ? start() : stop()
+            }
+            .frame(minWidth: 110)
+            if let taken {
+                Text("\(taken) is used by another app").font(.caption).foregroundStyle(.red)
+            }
         }
-        .frame(minWidth: 110)
+        .onDisappear { stop() }
     }
 
     private func start() {
+        taken = nil
+        // Only keys typed in this window count. Anything else (the window
+        // closed, or the note panel came forward) ends recording.
+        let window = NSApp.keyWindow
         monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { (event: NSEvent) -> NSEvent? in
+            guard let window, event.window === window, window.isVisible else {
+                stop()
+                return event
+            }
             if event.keyCode == UInt16(kVK_Escape) {
                 stop()
                 return nil
@@ -202,10 +217,19 @@ private struct HotkeyRecorder: View {
                 NSSound.beep()
                 return nil
             }
-            keyCode = Int(event.keyCode)
-            modifiers = carbonModifiers(flags)
-            label = symbols(flags) + keyName(event)
+            let newKeyCode = Int(event.keyCode), newModifiers = carbonModifiers(flags)
+            let newLabel = symbols(flags) + keyName(event)
             stop()
+            // Try it before saving, so a shortcut another app holds is never saved.
+            let isCurrent = newKeyCode == keyCode && newModifiers == modifiers
+            guard isCurrent || HotKey(keyCode: newKeyCode, modifiers: newModifiers, action: {}) != nil else {
+                taken = newLabel
+                NSSound.beep()
+                return nil
+            }
+            keyCode = newKeyCode
+            modifiers = newModifiers
+            label = newLabel
             return nil
         }
     }

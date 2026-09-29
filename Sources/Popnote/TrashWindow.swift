@@ -39,7 +39,8 @@ final class TrashModel: ObservableObject {
 
 struct TrashView: View {
     @ObservedObject var model: TrashModel
-    private let retentionDays = Int(Settings.trashRetention / 86400)
+    @AppStorage(Settings.Key.trashDays) private var trashDays = Settings.Default.trashDays
+    private var retentionDays: Int { Int(trashDays) }
     private let relative = RelativeDateTimeFormatter()
 
     var body: some View {

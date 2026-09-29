@@ -87,19 +87,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             if previous != nil { showPanel() } // switching policy can deactivate the app
         }
         if now.hotkeyKeyCode != previous?.hotkeyKeyCode || now.hotkeyModifiers != previous?.hotkeyModifiers {
-            hotKey = nil // unregister the old one first
-            hotKey = HotKey(keyCode: now.hotkeyKeyCode, modifiers: now.hotkeyModifiers) { [weak self] in
-                self?.togglePanel()
-            }
-            if hotKey == nil { NSLog("Popnote: \(Settings.hotkeyLabel) is taken by another app; hotkey not registered") }
+            registerHotKey(keyCode: now.hotkeyKeyCode, modifiers: now.hotkeyModifiers)
         }
     }
+
+    /// Swaps in a new global hotkey. If it can't be registered (another app
+    /// holds it), the one that was working stays.
+    private func registerHotKey(keyCode: Int, modifiers: Int) {
+        hotKey = nil // unregister the old one first; re-registering the same keys would fail
+        let make = { HotKey(keyCode: $0, modifiers: $1) { [weak self] in self?.togglePanel() } }
+        if let new = make(keyCode, modifiers) {
+            hotKey = new
+            hotKeyInUse = (keyCode, modifiers)
+            return
+        }
+        NSLog("Popnote: shortcut \(keyCode)/\(modifiers) is taken by another app; keeping the previous one")
+        if let inUse = hotKeyInUse { hotKey = make(inUse.keyCode, inUse.modifiers) }
+    }
+
+    /// Keys of the hotkey that's actually registered.
+    private var hotKeyInUse: (keyCode: Int, modifiers: Int)?
 
     @objc func biggerText(_ sender: Any?) { setTextSize(Settings.textSize + 1) }
     @objc func smallerText(_ sender: Any?) { setTextSize(Settings.textSize - 1) }
 
     private func setTextSize(_ size: Double) {
-        UserDefaults.standard.set(min(max(size, 10), 24), forKey: Settings.Key.textSize)
+        let range = Settings.textSizeRange
+        UserDefaults.standard.set(min(max(size, range.lowerBound), range.upperBound), forKey: Settings.Key.textSize)
     }
 
     @objc func showSettings(_ sender: Any?) {
@@ -120,10 +134,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     @objc func showPanel() {
         let wasVisible = panel.isVisible
-        if !wasVisible {
-            rememberPreviousApp()
-            positionPanel()
-        }
+        // Also when the panel stayed up (kept on top) while another app was in
+        // front: esc should go back to that app, not the one from last time.
+        if !wasVisible || !NSApp.isActive { rememberPreviousApp() }
+        if !wasVisible { positionPanel() }
         NSApp.activate(ignoringOtherApps: true)
         if !wasVisible && Settings.animateWindow {
             animateIn()
