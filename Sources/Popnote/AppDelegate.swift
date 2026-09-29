@@ -149,9 +149,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         panel.setFrame(frame, display: false)
     }
 
-    /// Dropdown mode hides the panel when you click elsewhere.
-    func windowDidResignKey(_ notification: Notification) {
-        guard Settings.dropdown, !Settings.keepOnTop, panel.attachedSheet == nil else { return }
+    /// Clicking another app or the desktop hides the panel. Popnote's own
+    /// Settings and Trash windows don't count, since they keep the app active.
+    func applicationDidResignActive(_ notification: Notification) {
+        guard Settings.hideOnClickOutside, !Settings.keepOnTop, panel.attachedSheet == nil else { return }
         panel.orderOut(nil)
     }
 

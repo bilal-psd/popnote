@@ -119,6 +119,7 @@ private struct WindowSettings: View {
     @AppStorage(Key.showInMenuBar) private var showInMenuBar = true
     @AppStorage(Key.showInDock) private var showInDock = false
     @AppStorage(Key.dropdown) private var dropdown = false
+    @AppStorage(Key.hideOnClickOutside) private var hideOnClickOutside = true
     @AppStorage(Key.keepOnTop) private var keepOnTop = false
     @AppStorage(Key.hotkeyLabel) private var hotkeyLabel = PopnoteCore.Settings.Default.hotkeyLabel
 
@@ -132,10 +133,13 @@ private struct WindowSettings: View {
                 }
             }
             Section {
-                Toggle("Drop down from the menu bar", isOn: $dropdown)
-                Text("Opens under the menu bar icon and hides when you click elsewhere.")
-                    .font(.caption).foregroundStyle(.secondary)
+                Toggle("Hide when clicking outside", isOn: $hideOnClickOutside)
                 Toggle("Keep on top of other windows", isOn: $keepOnTop)
+                Text("Keep on top (⌘T) also stops clicks outside from hiding the window.")
+                    .font(.caption).foregroundStyle(.secondary)
+                Toggle("Drop down from the menu bar", isOn: $dropdown)
+                Text("Opens under the menu bar icon.")
+                    .font(.caption).foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)

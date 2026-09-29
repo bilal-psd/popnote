@@ -15,6 +15,7 @@ public enum Settings {
         public static let showInDock = "showInDock"
         public static let showInMenuBar = "showInMenuBar"
         public static let dropdown = "dropdown"
+        public static let hideOnClickOutside = "hideOnClickOutside"
         public static let keepOnTop = "keepOnTop"
         public static let hotkeyKeyCode = "hotkeyKeyCode"
         public static let hotkeyModifiers = "hotkeyModifiers"
@@ -86,8 +87,10 @@ public enum Settings {
 
     public static var showInDock: Bool { bool(Key.showInDock, false) }
     public static var showInMenuBar: Bool { bool(Key.showInMenuBar, true) }
-    /// Panel drops down under the menu bar icon and hides when you click away.
+    /// Panel drops down under the menu bar icon.
     public static var dropdown: Bool { bool(Key.dropdown, false) }
+    /// Clicking another app or the desktop hides the panel (unless kept on top).
+    public static var hideOnClickOutside: Bool { bool(Key.hideOnClickOutside, true) }
     public static var keepOnTop: Bool {
         get { bool(Key.keepOnTop, false) }
         set { defaults.set(newValue, forKey: Key.keepOnTop) }
