@@ -38,7 +38,9 @@ gh repo clone bilal-psd/homebrew-tap "$TAP" -- --quiet
 mkdir -p "$TAP/Casks"
 sed -e "s/@VERSION@/$VERSION/" -e "s/@SHA256@/$SHA/" scripts/popnote.rb.in > "$TAP/Casks/popnote.rb"
 git -C "$TAP" add Casks/popnote.rb
-git -C "$TAP" commit --quiet -m "Popnote $VERSION"
+# Same identity as this repo, not whatever the machine defaults to.
+git -C "$TAP" -c user.name="$(git config user.name)" -c user.email="$(git config user.email)" \
+    commit --quiet -m "Popnote $VERSION"
 git -C "$TAP" push --quiet
 
 echo "Released Popnote $VERSION"
