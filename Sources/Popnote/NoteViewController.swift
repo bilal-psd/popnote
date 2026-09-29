@@ -306,8 +306,8 @@ final class NoteViewController: NSViewController, NSTextViewDelegate, NSTextFiel
         drawer.frame.origin.x = -final.width
         scrim.alphaValue = 0
         NSAnimationContext.runAnimationGroup { context in
-            context.duration = 0.14
-            context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            context.duration = 0.12
+            context.timingFunction = Motion.easeOut
             drawer.animator().frame = final
             scrim.animator().alphaValue = 1
         }

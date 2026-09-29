@@ -120,7 +120,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     @objc func showPanel() {
         let wasVisible = panel.isVisible
-        if !wasVisible { positionPanel() }
+        if !wasVisible {
+            rememberPreviousApp()
+            positionPanel()
+        }
         NSApp.activate(ignoringOtherApps: true)
         if !wasVisible && Settings.animateWindow {
             animateIn()
@@ -132,56 +135,79 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     /// Hides the panel and hands focus back to the previous app.
+    ///
+    /// Focus goes back *before* the fade-out, so anything typed straight after
+    /// esc/⌥P lands in that app, not in the fading window.
     @objc func hidePanel() {
-        dismissPanel { [weak self] in
-            guard let self else { return }
-            if self.settingsWindow?.window?.isVisible != true && self.trashWindow?.window?.isVisible != true {
-                NSApp.hide(nil)
-            }
+        let otherWindowsOpen = settingsWindow?.window?.isVisible == true || trashWindow?.window?.isVisible == true
+        if !otherWindowsOpen, let previousApp, !previousApp.isTerminated {
+            previousApp.activate()
+            dismissPanel()
+        } else {
+            dismissPanel { if !otherWindowsOpen { NSApp.hide(nil) } }
         }
     }
 
     // MARK: Opening and closing animation
 
+    /// The app that was frontmost when the panel opened; it gets focus back on close.
+    private var previousApp: NSRunningApplication?
+
+    private func rememberPreviousApp() {
+        let front = NSWorkspace.shared.frontmostApplication
+        previousApp = front?.processIdentifier == ProcessInfo.processInfo.processIdentifier ? nil : front
+    }
+
     /// Bumped by every show/hide so a finished fade-out can tell it was superseded.
     private var animationGeneration = 0
+    /// True while fading out; a second hide request (e.g. from losing focus) is ignored.
+    private var isHiding = false
 
-    /// Fades in while sliding ~10pt into place (up from below, or down under
-    /// the menu bar). With Reduce Motion on, it only fades.
+    /// Fades the window in while its contents slide ~10pt into place (up from
+    /// below, or down under the menu bar). The window itself doesn't move, so
+    /// nothing goes through the window server and the saved frame is never off.
+    /// With Reduce Motion on, it only fades.
     private func animateIn() {
         animationGeneration += 1
-        let final = panel.frame
-        var start = final
-        if !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
-            start.origin.y += Settings.windowPosition == .menuBar ? 10 : -10
-        }
-        panel.setFrame(start, display: false)
+        isHiding = false
         panel.alphaValue = 0
         panel.makeKeyAndOrderFront(nil)
+
+        if !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion, let content = panel.contentView {
+            content.wantsLayer = true
+            let slide = CABasicAnimation(keyPath: "transform.translation.y")
+            // Layer y points up: start below (or above, for the menu bar) and settle at 0.
+            slide.fromValue = Settings.windowPosition == .menuBar ? 10 : -10
+            slide.toValue = 0
+            slide.duration = 0.12
+            slide.timingFunction = Motion.easeOut
+            content.layer?.add(slide, forKey: "popnote.open")
+        }
         NSAnimationContext.runAnimationGroup { context in
             context.duration = 0.12
-            context.timingFunction = CAMediaTimingFunction(name: .easeOut)
-            panel.animator().setFrame(final, display: true)
+            context.timingFunction = Motion.easeOut
             panel.animator().alphaValue = 1
         }
     }
 
     /// Fades out (if animating), then orders the panel out.
     private func dismissPanel(then completion: (() -> Void)? = nil) {
-        guard panel.isVisible else { completion?(); return }
+        guard panel.isVisible, !isHiding else { return }
         guard Settings.animateWindow else {
             panel.orderOut(nil)
             completion?()
             return
         }
         animationGeneration += 1
+        isHiding = true
         let generation = animationGeneration
         NSAnimationContext.runAnimationGroup({ context in
             context.duration = 0.09
-            context.timingFunction = CAMediaTimingFunction(name: .easeIn)
+            context.timingFunction = Motion.easeOut
             panel.animator().alphaValue = 0
         }, completionHandler: { [weak self] in
             guard let self, generation == self.animationGeneration else { return }
+            self.isHiding = false
             self.panel.orderOut(nil)
             self.panel.alphaValue = 1
             completion?()
@@ -191,6 +217,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     /// Reopened mid-fade: keep the window and make it fully visible again.
     private func cancelHide() {
         animationGeneration += 1
+        isHiding = false
         panel.alphaValue = 1
     }
 
