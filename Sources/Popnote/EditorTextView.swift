@@ -59,7 +59,12 @@ final class EditorTextView: NSTextView, NSTextStorageDelegate {
     /// and clicking below the text still focuses it.
     override func setFrameSize(_ newSize: NSSize) {
         var size = newSize
-        if let visible = enclosingScrollView?.contentSize.height { size.height = max(size.height, visible) }
+        // Exactly the visible height (excluding the scroll view's insets), so a
+        // short note isn't scrollable and the scroll bar doesn't flash.
+        if let scrollView = enclosingScrollView {
+            let insets = scrollView.contentInsets
+            size.height = max(size.height, scrollView.contentSize.height - insets.top - insets.bottom)
+        }
         super.setFrameSize(size)
     }
 
