@@ -85,6 +85,13 @@ final class EditorTextView: NSTextView, NSTextStorageDelegate {
         onCopiedNote?()
     }
 
+    /// NSTextView disables Copy when nothing is selected, which would stop ⌘C
+    /// from ever reaching `copy(_:)` above.
+    override func validateUserInterfaceItem(_ item: NSValidatedUserInterfaceItem) -> Bool {
+        if item.action == #selector(copy(_:)) { return true }
+        return super.validateUserInterfaceItem(item)
+    }
+
     // MARK: Styling
 
     /// Restyles on every text change, before layout and before the selection
