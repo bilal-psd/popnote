@@ -59,19 +59,7 @@ final class NoteViewController: NSViewController, NSTextViewDelegate, NSSearchFi
         searchRow.edgeInsets = NSEdgeInsets(top: 0, left: 12, bottom: 4, right: 12)
         searchRow.isHidden = true
 
-        textView.isRichText = false          // paste arrives as plain text
-        textView.importsGraphics = false
-        textView.allowsUndo = true
-        textView.drawsBackground = false
-        textView.font = .systemFont(ofSize: 14)
-        textView.textContainerInset = NSSize(width: 12, height: 6)
-        textView.isAutomaticQuoteSubstitutionEnabled = false
-        textView.isAutomaticDashSubstitutionEnabled = false
-        textView.isAutomaticTextReplacementEnabled = false
-        textView.isVerticallyResizable = true
-        textView.isHorizontallyResizable = false
-        textView.autoresizingMask = [.width]
-        textView.textContainer?.widthTracksTextView = true
+        textView.configure()
         textView.delegate = self
         textView.onEscape = { [weak self] in self?.onHide?() }
 

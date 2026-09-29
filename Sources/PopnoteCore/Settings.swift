@@ -1,7 +1,7 @@
 import Foundation
 
-/// User preferences. Only the expiry settings exist in pass 1; the
-/// settings window comes in pass 3.
+/// User preferences. The settings window comes in pass 3; until then
+/// these can be changed with `defaults write com.popnote.Popnote <key> <value>`.
 public enum Settings {
     private static let defaults = UserDefaults.standard
 
@@ -15,6 +15,11 @@ public enum Settings {
     public static var voidRetention: TimeInterval {
         let days = defaults.object(forKey: "voidDays") as? Double ?? 7
         return days * 86400
+    }
+
+    /// What happens to a checklist item when it's checked. Default: stays put.
+    public static var checkedBehavior: CheckedBehavior {
+        CheckedBehavior(rawValue: defaults.string(forKey: "checkedItems") ?? "") ?? .keep
     }
 
     public static var lastNoteID: Int64? {

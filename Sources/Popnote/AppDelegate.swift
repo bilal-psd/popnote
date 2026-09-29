@@ -153,6 +153,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         note.addItem(item("Close", #selector(hidePanel), "w", target: self))
         addSubmenu(note, to: main)
 
+        // Sent to the focused editor (nil target = first responder).
+        let format = NSMenu(title: "Format")
+        let cycle = item("Cycle Line Type", #selector(EditorTextView.cycleLineType(_:)), "m")
+        cycle.keyEquivalentModifierMask = [.command, .shift]
+        format.addItem(cycle)
+        format.addItem(item("Check / Uncheck", #selector(EditorTextView.toggleCheckbox(_:)), "\r"))
+        addSubmenu(format, to: main)
+
         return main
     }
 

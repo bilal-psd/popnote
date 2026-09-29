@@ -20,11 +20,16 @@ public struct Note: Identifiable, Equatable {
     }
 
     /// The first line, trimmed and lowercased, e.g. "list", "code", "pin".
-    public var keyword: String? {
-        let first = body.split(separator: "\n", maxSplits: 1, omittingEmptySubsequences: false).first ?? ""
+    public var keyword: String? { Note.keyword(of: body) }
+
+    public static func keyword(of text: String) -> String? {
+        let first = text.split(separator: "\n", maxSplits: 1, omittingEmptySubsequences: false).first ?? ""
         let word = first.trimmingCharacters(in: .whitespaces).lowercased()
         return word.isEmpty ? nil : word
     }
+
+    /// First-line words that change how a note behaves.
+    public static let keywords: Set<String> = ["list", "code", "pin"]
 
     public var isPinnedByKeyword: Bool { keyword == "pin" }
 
@@ -37,5 +42,22 @@ public struct Note: Identifiable, Equatable {
     public var preview: String {
         body.split(separator: "\n").first(where: { !$0.trimmingCharacters(in: .whitespaces).isEmpty })
             .map { String($0).trimmingCharacters(in: .whitespaces) } ?? ""
+    }
+}
+
+/// How the editor treats a note, from its first-line keyword.
+public enum NoteMode {
+    case plain
+    /// "list": Enter always starts a new checkbox.
+    case list
+    /// "code": monospaced, no markers, paste keeps indentation.
+    case code
+
+    public init(text: String) {
+        switch Note.keyword(of: text) {
+        case "list": self = .list
+        case "code": self = .code
+        default: self = .plain
+        }
     }
 }

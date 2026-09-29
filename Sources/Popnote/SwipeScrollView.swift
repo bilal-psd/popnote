@@ -44,12 +44,3 @@ final class SwipeScrollView: NSScrollView {
         }
     }
 }
-
-/// Plain-text editor. Esc hides the panel instead of opening completions.
-final class EditorTextView: NSTextView {
-    var onEscape: (() -> Void)?
-
-    override func cancelOperation(_ sender: Any?) {
-        onEscape?()
-    }
-}
