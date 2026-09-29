@@ -24,7 +24,10 @@ final class NoteViewController: NSViewController, NSTextViewDelegate, NSTextFiel
     private let effectView = NSVisualEffectView()
     private let backgroundView = BackgroundView()
     private let scrollView = SwipeScrollView()
-    private let textView = EditorTextView(frame: NSRect(x: 0, y: 0, width: 400, height: 400))
+    /// Starts at zero width: it only follows the scroll view's *changes* in
+    /// width, so any starting width would stay added on and lines would wrap
+    /// off the right edge.
+    private let textView = EditorTextView(frame: .zero)
     private let searchBar = SearchBarView()
     private let cornerInfo = CornerInfoView()
     private let shortcuts = ShortcutOverlayView()
