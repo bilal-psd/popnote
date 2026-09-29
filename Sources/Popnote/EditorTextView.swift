@@ -52,6 +52,9 @@ final class EditorTextView: NSTextView, NSTextStorageDelegate {
         textStorage.beginEditing()
         restyle(textStorage)
         textStorage.endEditing()
+        // Not in `restyle`: setting typing attributes reads the selection, which
+        // is stale mid-edit (e.g. ⌘A then switching notes) and makes AppKit throw.
+        typingAttributes = [.font: bodyFont, .foregroundColor: theme.text]
     }
 
     /// At least as tall as the visible area, so paper lines fill the panel
@@ -145,7 +148,6 @@ final class EditorTextView: NSTextView, NSTextStorageDelegate {
             }
         }
         decorations = found
-        typingAttributes = base
         needsDisplay = true
     }
 
