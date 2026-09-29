@@ -36,6 +36,15 @@ import Testing
     #expect(Markers.newlineAction(for: "\t- ", inListNote: true) == .endList)
 }
 
+@Test func enterBeforeItemTextAddsItemAbove() {
+    #expect(Markers.newlineAction(for: "- [ ] milk", caret: 0, inListNote: false) == .insertAbove("- [ ] "))
+    #expect(Markers.newlineAction(for: "- [x] milk", caret: 6, inListNote: false) == .insertAbove("- [ ] "))
+    #expect(Markers.newlineAction(for: "\t3. third", caret: 1, inListNote: false) == .insertAbove("\t3. "))
+    #expect(Markers.newlineAction(for: "- [ ] milk", caret: 7, inListNote: false) == .continueWith("- [ ] "))
+    #expect(Markers.newlineAction(for: "- [ ] ", caret: 0, inListNote: false) == .endList)
+    #expect(Markers.newlineAction(for: "loose line", caret: 0, inListNote: true) == .plain)
+}
+
 @Test func listNotesAlwaysContinueWithCheckboxes() {
     #expect(Markers.newlineAction(for: "list", inListNote: true) == .continueWith("- [ ] "))
     #expect(Markers.newlineAction(for: "loose line", inListNote: true) == .continueWith("- [ ] "))

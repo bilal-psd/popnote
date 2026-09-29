@@ -275,7 +275,8 @@ final class EditorTextView: NSTextView, NSTextStorageDelegate {
         guard mode != .code else { return super.insertNewline(sender) }
         let selection = selectedRange()
         let line = lineRange(at: selection.location)
-        switch Markers.newlineAction(for: (string as NSString).substring(with: line), inListNote: mode == .list) {
+        let lineText = (string as NSString).substring(with: line)
+        switch Markers.newlineAction(for: lineText, caret: selection.location - line.location, inListNote: mode == .list) {
         case .plain:
             super.insertNewline(sender)
         case .continueWith(let prefix):
@@ -284,6 +285,14 @@ final class EditorTextView: NSTextView, NSTextStorageDelegate {
             isApplyingEdit = false
         case .endList:
             replace(line, with: "", select: NSRange(location: line.location, length: 0))
+        case .insertAbove(let prefix):
+            // The caret stays at the start of the current item's text.
+            let inserted = prefix + "\n"
+            let parsed = Markers.parse(lineText)
+            let contentStart = line.location + (inserted as NSString).length
+                + (parsed.indent as NSString).length + parsed.markerLength
+            replace(NSRange(location: line.location, length: 0), with: inserted,
+                    select: NSRange(location: contentStart, length: 0))
         }
     }
 
