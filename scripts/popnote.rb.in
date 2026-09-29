@@ -7,7 +7,7 @@ cask "popnote" do
   desc "Quick notes and checklists that clear themselves away unless pinned"
   homepage "https://github.com/bilal-psd/popnote"
 
-  depends_on macos: ">= :sonoma"
+  depends_on macos: :sonoma
 
   app "Popnote.app"
 
