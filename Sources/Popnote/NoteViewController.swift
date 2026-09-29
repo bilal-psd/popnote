@@ -17,6 +17,9 @@ final class NoteViewController: NSViewController, NSTextViewDelegate, NSTextFiel
     private var index = 0
     /// Pin pressed on the blank draft; applied when the note is created.
     private var draftPinned = false
+    /// The editor holds text the store refused. Nothing may replace it until
+    /// a save succeeds.
+    private var hasUnsavedEdits = false
 
     private let effectView = NSVisualEffectView()
     private let backgroundView = BackgroundView()
@@ -150,7 +153,10 @@ final class NoteViewController: NSViewController, NSTextViewDelegate, NSTextFiel
     // MARK: State
 
     /// Re-reads notes from the store, staying on `id` if it still exists.
+    /// Skipped while an edit is unsaved, so the store's older text can't
+    /// overwrite it.
     func reload(keeping id: Int64?) {
+        guard save() else { return }
         notes = (try? store.activeNotes()) ?? []
         if let id, let i = notes.firstIndex(where: { $0.id == id }) {
             index = i
@@ -199,31 +205,49 @@ final class NoteViewController: NSViewController, NSTextViewDelegate, NSTextFiel
     }
 
     func textDidChange(_ notification: Notification) {
+        save()
+    }
+
+    /// Writes the editor's text to the store. Returns false if that failed;
+    /// the text stays in the editor and the next call tries again.
+    @discardableResult
+    private func save() -> Bool {
         let body = textView.string
-        if var note = current {
-            guard note.body != body else { return }
-            try? store.updateBody(id: note.id, body: body)
-            note.body = body
-            note.updatedAt = Date()
-            notes[index] = note
-        } else {
-            guard !body.isEmpty, var note = try? store.insert(body: body) else { return }
-            if draftPinned {
-                try? store.setPinned(id: note.id, true)
-                note.pinned = true
-                draftPinned = false
+        do {
+            if var note = current {
+                guard note.body != body else { return true }
+                try store.updateBody(id: note.id, body: body)
+                note.body = body
+                note.updatedAt = Date()
+                notes[index] = note
+            } else {
+                guard !body.isEmpty else { return true }
+                var note = try store.insert(body: body)
+                if draftPinned {
+                    try? store.setPinned(id: note.id, true)
+                    note.pinned = true
+                    draftPinned = false
+                }
+                notes.append(note)
+                index = notes.count - 1
+                Settings.lastNoteID = note.id
             }
-            notes.append(note)
-            index = notes.count - 1
-            Settings.lastNoteID = note.id
+        } catch {
+            if !hasUnsavedEdits { cornerInfo.flash("couldn't save  retrying") }
+            hasUnsavedEdits = true
+            return false
         }
+        if hasUnsavedEdits { cornerInfo.flash("saved") }
+        hasUnsavedEdits = false
         updateStatus()
+        return true
     }
 
     /// Moves to another note. A blank note you leave behind is deleted outright.
     private func go(to target: Int) {
         var target = target
         guard target != index else { return }
+        guard save() else { return NSSound.beep() }
         if let note = current, note.isBlank {
             try? store.purge(id: note.id)
             notes.remove(at: index)
@@ -327,7 +351,9 @@ final class NoteViewController: NSViewController, NSTextViewDelegate, NSTextFiel
             return
         }
         note.pinned.toggle()
-        try? store.setPinned(id: note.id, note.pinned)
+        let now = Date()
+        try? store.setPinned(id: note.id, note.pinned, now: now)
+        if !note.pinned { note.updatedAt = now }
         notes[index] = note
         updateStatus()
         cornerInfo.flash(note.pinned ? "\(Glyph.pin) pinned" : "unpinned")

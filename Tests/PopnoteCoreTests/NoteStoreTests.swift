@@ -38,13 +38,16 @@ private let t0 = Date(timeIntervalSince1970: 1_800_000_000)
     #expect(try store.activeNotes().count == 2)
 }
 
-@Test func unpinnedNoteKeepsItsOriginalClock() throws {
+@Test func unpinningRestartsTheClock() throws {
     let store = try NoteStore(url: nil)
     let note = try store.insert(body: "x", now: t0)
     try store.setPinned(id: note.id, true)
-    try store.setPinned(id: note.id, false)
+    let unpinnedAt = t0.addingTimeInterval(10 * day)
+    try store.setPinned(id: note.id, false, now: unpinnedAt)
 
-    try store.sweep(now: t0.addingTimeInterval(ttl), ttl: ttl, trashRetention: retention)
+    try store.sweep(now: unpinnedAt.addingTimeInterval(ttl - 60), ttl: ttl, trashRetention: retention)
+    #expect(try store.activeNotes().map(\.id) == [note.id])
+    try store.sweep(now: unpinnedAt.addingTimeInterval(ttl), ttl: ttl, trashRetention: retention)
     #expect(try store.activeNotes().isEmpty)
 }
 

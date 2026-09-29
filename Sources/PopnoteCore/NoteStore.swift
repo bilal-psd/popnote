@@ -72,8 +72,14 @@ public final class NoteStore {
         try run("UPDATE notes SET body = ?, updated_at = ? WHERE id = ?", [.text(body), .date(now), .int(id)])
     }
 
-    public func setPinned(id: Int64, _ pinned: Bool) throws {
-        try run("UPDATE notes SET pinned = ? WHERE id = ?", [.int(pinned ? 1 : 0), .int(id)])
+    /// Unpinning restarts the expiry clock, so a note pinned long ago doesn't
+    /// vanish on the next sweep.
+    public func setPinned(id: Int64, _ pinned: Bool, now: Date = Date()) throws {
+        if pinned {
+            try run("UPDATE notes SET pinned = 1 WHERE id = ?", [.int(id)])
+        } else {
+            try run("UPDATE notes SET pinned = 0, updated_at = ? WHERE id = ?", [.date(now), .int(id)])
+        }
     }
 
     public func moveToTrash(id: Int64, now: Date = Date()) throws {
