@@ -21,9 +21,7 @@ private func note(_ body: String) -> Note {
 @Test func customKeywords() {
     var keywords = Keywords.standard
     keywords.list = "todo"
-    keywords.check = "done"
     #expect(NoteMode(text: "todo\n- [ ] a", keywords: keywords) == .list)
     #expect(NoteMode(text: "list\n- [ ] a", keywords: keywords) == .plain)
-    #expect(Markers.strippingCheckKeyword("- [ ] call mom done", keyword: "done") == "- [ ] call mom")
     #expect(NoteText.content(of: note("todo\nx"), keywords: keywords) == "x")
 }

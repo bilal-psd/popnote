@@ -257,11 +257,7 @@ final class EditorTextView: NSTextView, NSTextStorageDelegate {
         super.insertText(string, replacementRange: replacementRange)
         guard mode != .code, !isApplyingEdit else { return }
         let typed = (string as? String) ?? (string as? NSAttributedString)?.string
-        if typed == " " {
-            expandCheckboxShortcut()
-        } else if typed?.lowercased() == "x" {
-            applyCheckKeyword()
-        }
+        if typed == " " { expandCheckboxShortcut() }
     }
 
     /// "[] " at the start of a line becomes a checkbox.
@@ -272,14 +268,6 @@ final class EditorTextView: NSTextView, NSTextStorageDelegate {
         guard let expanded = Markers.expandShortcut((string as NSString).substring(with: prefixRange)) else { return }
         replace(prefixRange, with: expanded,
                 select: NSRange(location: line.location + (expanded as NSString).length, length: 0))
-    }
-
-    /// "/x" at the end of an unchecked item checks it off.
-    private func applyCheckKeyword() {
-        let line = lineRange(at: selectedRange().location)
-        guard let stripped = Markers.strippingCheckKeyword((string as NSString).substring(with: line)) else { return }
-        replace(line, with: stripped, select: NSRange(location: line.location + (stripped as NSString).length, length: 0))
-        toggleLine(at: line.location)
     }
 
     /// Enter continues a list, or ends it on an empty item.

@@ -57,13 +57,6 @@ import Testing
     #expect(Markers.expandShortcut("a [] ") == nil)
 }
 
-@Test func checkKeyword() {
-    #expect(Markers.strippingCheckKeyword("- [ ] call mom /x") == "- [ ] call mom")
-    #expect(Markers.strippingCheckKeyword("- [ ] call mom/X") == "- [ ] call mom")
-    #expect(Markers.strippingCheckKeyword("- [x] call mom /x") == nil)
-    #expect(Markers.strippingCheckKeyword("call mom /x") == nil)
-}
-
 // MARK: Checking off
 
 @Test func toggleKeepsItemInPlace() {

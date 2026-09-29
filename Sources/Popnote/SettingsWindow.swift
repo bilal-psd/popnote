@@ -160,7 +160,6 @@ private struct KeywordSettings: View {
     @AppStorage(Key.keywordList) private var list = ""
     @AppStorage(Key.keywordCode) private var code = ""
     @AppStorage(Key.keywordPin) private var pin = ""
-    @AppStorage(Key.keywordCheck) private var check = ""
 
     var body: some View {
         Form {
@@ -170,11 +169,6 @@ private struct KeywordSettings: View {
                 TextField("Pinned note", text: $pin, prompt: Text(Keywords.standard.pin))
             } header: {
                 Text("First line of a note")
-            }
-            Section {
-                TextField("Check off an item", text: $check, prompt: Text(Keywords.standard.check))
-            } header: {
-                Text("End of a checklist item")
             }
         }
         .formStyle(.grouped)

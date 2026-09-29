@@ -26,7 +26,6 @@ public enum Settings {
         public static let keywordList = "keywordList"
         public static let keywordCode = "keywordCode"
         public static let keywordPin = "keywordPin"
-        public static let keywordCheck = "keywordCheck"
         static let lastNoteID = "lastNoteID"
     }
 
@@ -73,7 +72,6 @@ public enum Settings {
         if let v = string(Key.keywordList) { k.list = v.lowercased() }
         if let v = string(Key.keywordCode) { k.code = v.lowercased() }
         if let v = string(Key.keywordPin) { k.pin = v.lowercased() }
-        if let v = string(Key.keywordCheck) { k.check = v.lowercased() }
         return k
     }
 
@@ -130,8 +128,6 @@ public struct Keywords: Equatable {
     public var list = "list"
     public var code = "code"
     public var pin = "pin"
-    /// Typed at the end of an unchecked item to check it off.
-    public var check = "/x"
 
     public static let standard = Keywords()
     public static var current: Keywords { Settings.keywords }

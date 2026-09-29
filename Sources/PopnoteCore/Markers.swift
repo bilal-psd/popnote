@@ -100,15 +100,4 @@ public enum Markers {
         guard rest == "[] " || rest == "[ ] " else { return nil }
         return indent + marker(for: .checkbox(checked: false))
     }
-
-    /// An unchecked item ending in the check keyword ("/x" by default) gets checked.
-    /// Returns the line with the keyword removed, or nil if it doesn't apply.
-    public static func strippingCheckKeyword(_ line: String, keyword: String = Keywords.current.check) -> String? {
-        let parsed = parse(line)
-        guard !keyword.isEmpty, parsed.kind == .checkbox(checked: false),
-              parsed.content.lowercased().hasSuffix(keyword) else { return nil }
-        var content = String(parsed.content.dropLast(keyword.count))
-        while content.hasSuffix(" ") { content.removeLast() }
-        return parsed.indent + marker(for: parsed.kind) + content
-    }
 }
