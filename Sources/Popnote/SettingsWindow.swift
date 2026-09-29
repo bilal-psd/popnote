@@ -183,7 +183,6 @@ private struct HotkeyRecorder: View {
     @AppStorage(Key.hotkeyModifiers) private var modifiers = PopnoteCore.Settings.Default.hotkeyModifiers
     @AppStorage(Key.hotkeyLabel) private var label = PopnoteCore.Settings.Default.hotkeyLabel
     @State private var monitor: Any?
-    @State private var taken: String?
 
     var body: some View {
         VStack(alignment: .trailing, spacing: 2) {
@@ -191,15 +190,15 @@ private struct HotkeyRecorder: View {
                 monitor == nil ? start() : stop()
             }
             .frame(minWidth: 110)
-            if let taken {
-                Text("\(taken) is a macOS shortcut").font(.caption).foregroundStyle(.red)
+            if monitor != nil {
+                // macOS keeps its own shortcuts (e.g. ⌘Space); they never reach Popnote.
+                Text("Shortcuts macOS already uses won't register").font(.caption).foregroundStyle(.secondary)
             }
         }
         .onDisappear { stop() }
     }
 
     private func start() {
-        taken = nil
         // Only keys typed in this window count. Anything else (the window
         // closed, or the note panel came forward) ends recording.
         let window = NSApp.keyWindow
@@ -217,18 +216,10 @@ private struct HotkeyRecorder: View {
                 NSSound.beep()
                 return nil
             }
-            let newKeyCode = Int(event.keyCode), newModifiers = carbonModifiers(flags)
-            let newLabel = symbols(flags) + keyName(event)
+            keyCode = Int(event.keyCode)
+            modifiers = carbonModifiers(flags)
+            label = symbols(flags) + keyName(event)
             stop()
-            // macOS would get these keys first, so Popnote would never open.
-            guard !HotKey.isSystemShortcut(keyCode: newKeyCode, modifiers: newModifiers) else {
-                taken = newLabel
-                NSSound.beep()
-                return nil
-            }
-            keyCode = newKeyCode
-            modifiers = newModifiers
-            label = newLabel
             return nil
         }
     }
