@@ -14,7 +14,10 @@ public enum Settings {
         public static let translucent = "translucent"
         public static let showInDock = "showInDock"
         public static let showInMenuBar = "showInMenuBar"
+        /// Legacy on/off for "under the menu bar icon"; read once as a fallback.
         public static let dropdown = "dropdown"
+        public static let windowPosition = "windowPosition"
+        public static let animateWindow = "animateWindow"
         public static let hideOnClickOutside = "hideOnClickOutside"
         public static let keepOnTop = "keepOnTop"
         public static let hotkeyKeyCode = "hotkeyKeyCode"
@@ -87,8 +90,13 @@ public enum Settings {
 
     public static var showInDock: Bool { bool(Key.showInDock, false) }
     public static var showInMenuBar: Bool { bool(Key.showInMenuBar, true) }
-    /// Panel drops down under the menu bar icon.
-    public static var dropdown: Bool { bool(Key.dropdown, false) }
+    /// Where the window appears each time it opens.
+    public static var windowPosition: WindowPosition {
+        if let raw = string(Key.windowPosition), let position = WindowPosition(rawValue: raw) { return position }
+        return bool(Key.dropdown, false) ? .menuBar : .bottomRight
+    }
+    /// Quick fade/slide when the window opens and closes.
+    public static var animateWindow: Bool { bool(Key.animateWindow, true) }
     /// Clicking another app or the desktop hides the panel (unless kept on top).
     public static var hideOnClickOutside: Bool { bool(Key.hideOnClickOutside, true) }
     public static var keepOnTop: Bool {
@@ -106,6 +114,15 @@ public enum Settings {
         get { (defaults.object(forKey: Key.lastNoteID) as? NSNumber)?.int64Value }
         set { defaults.set(newValue.map { NSNumber(value: $0) }, forKey: Key.lastNoteID) }
     }
+}
+
+public enum WindowPosition: String, CaseIterable {
+    /// Bottom-right corner of the screen the mouse is on.
+    case bottomRight
+    /// Wherever you last moved it.
+    case remember
+    /// Hanging under the menu bar icon.
+    case menuBar
 }
 
 /// The trigger words, which you can rename in Settings.

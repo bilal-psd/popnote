@@ -119,21 +119,99 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     @objc func showPanel() {
-        if Settings.dropdown && !panel.isVisible { positionAsDropdown() }
+        let wasVisible = panel.isVisible
+        if !wasVisible { positionPanel() }
         NSApp.activate(ignoringOtherApps: true)
-        panel.makeKeyAndOrderFront(nil)
+        if !wasVisible && Settings.animateWindow {
+            animateIn()
+        } else {
+            cancelHide()
+            panel.makeKeyAndOrderFront(nil)
+        }
         noteController.focusEditor()
     }
 
     /// Hides the panel and hands focus back to the previous app.
     @objc func hidePanel() {
-        panel.orderOut(nil)
-        if settingsWindow?.window?.isVisible != true && trashWindow?.window?.isVisible != true {
-            NSApp.hide(nil)
+        dismissPanel { [weak self] in
+            guard let self else { return }
+            if self.settingsWindow?.window?.isVisible != true && self.trashWindow?.window?.isVisible != true {
+                NSApp.hide(nil)
+            }
         }
     }
 
-    /// Dropdown mode: the panel hangs under the menu bar icon, or at the top
+    // MARK: Opening and closing animation
+
+    /// Bumped by every show/hide so a finished fade-out can tell it was superseded.
+    private var animationGeneration = 0
+
+    /// Fades in while sliding ~10pt into place (up from below, or down under
+    /// the menu bar). With Reduce Motion on, it only fades.
+    private func animateIn() {
+        animationGeneration += 1
+        let final = panel.frame
+        var start = final
+        if !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+            start.origin.y += Settings.windowPosition == .menuBar ? 10 : -10
+        }
+        panel.setFrame(start, display: false)
+        panel.alphaValue = 0
+        panel.makeKeyAndOrderFront(nil)
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.12
+            context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            panel.animator().setFrame(final, display: true)
+            panel.animator().alphaValue = 1
+        }
+    }
+
+    /// Fades out (if animating), then orders the panel out.
+    private func dismissPanel(then completion: (() -> Void)? = nil) {
+        guard panel.isVisible else { completion?(); return }
+        guard Settings.animateWindow else {
+            panel.orderOut(nil)
+            completion?()
+            return
+        }
+        animationGeneration += 1
+        let generation = animationGeneration
+        NSAnimationContext.runAnimationGroup({ context in
+            context.duration = 0.09
+            context.timingFunction = CAMediaTimingFunction(name: .easeIn)
+            panel.animator().alphaValue = 0
+        }, completionHandler: { [weak self] in
+            guard let self, generation == self.animationGeneration else { return }
+            self.panel.orderOut(nil)
+            self.panel.alphaValue = 1
+            completion?()
+        })
+    }
+
+    /// Reopened mid-fade: keep the window and make it fully visible again.
+    private func cancelHide() {
+        animationGeneration += 1
+        panel.alphaValue = 1
+    }
+
+    /// Places the panel according to the "Open at" setting.
+    private func positionPanel() {
+        switch Settings.windowPosition {
+        case .remember:
+            break
+        case .menuBar:
+            positionAsDropdown()
+        case .bottomRight:
+            let mouse = NSEvent.mouseLocation
+            let screen = NSScreen.screens.first(where: { NSMouseInRect(mouse, $0.frame, false) }) ?? NSScreen.main
+            guard let visible = screen?.visibleFrame else { return }
+            var frame = panel.frame
+            frame.origin = NSPoint(x: visible.maxX - frame.width - 16, y: visible.minY + 16)
+            panel.setFrame(frame, display: false)
+        }
+    }
+
+    /// Under the menu bar icon, or at the top
     /// of the screen if the icon is hidden.
     private func positionAsDropdown() {
         var frame = panel.frame
@@ -153,7 +231,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     /// Settings and Trash windows don't count, since they keep the app active.
     func applicationDidResignActive(_ notification: Notification) {
         guard Settings.hideOnClickOutside, !Settings.keepOnTop, panel.attachedSheet == nil else { return }
-        panel.orderOut(nil)
+        dismissPanel()
     }
 
     @objc func newNoteFromMenuBar(_ sender: Any?) {
