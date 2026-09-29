@@ -25,30 +25,24 @@ import Testing
 // MARK: Enter
 
 @Test func enterContinuesLists() {
-    #expect(Markers.newlineAction(for: "- [x] done", inListNote: false) == .continueWith("- [ ] "))
-    #expect(Markers.newlineAction(for: "\t- item", inListNote: false) == .continueWith("\t- "))
-    #expect(Markers.newlineAction(for: "3. third", inListNote: false) == .continueWith("4. "))
-    #expect(Markers.newlineAction(for: "plain", inListNote: false) == .plain)
+    #expect(Markers.newlineAction(for: "- [x] done") == .continueWith("- [ ] "))
+    #expect(Markers.newlineAction(for: "\t- item") == .continueWith("\t- "))
+    #expect(Markers.newlineAction(for: "3. third") == .continueWith("4. "))
+    #expect(Markers.newlineAction(for: "plain") == .plain)
 }
 
 @Test func enterOnEmptyItemEndsList() {
-    #expect(Markers.newlineAction(for: "- [ ] ", inListNote: false) == .endList)
-    #expect(Markers.newlineAction(for: "\t- ", inListNote: true) == .endList)
+    #expect(Markers.newlineAction(for: "- [ ] ") == .endList)
+    #expect(Markers.newlineAction(for: "\t- ") == .endList)
 }
 
 @Test func enterBeforeItemTextAddsItemAbove() {
-    #expect(Markers.newlineAction(for: "- [ ] milk", caret: 0, inListNote: false) == .insertAbove("- [ ] "))
-    #expect(Markers.newlineAction(for: "- [x] milk", caret: 6, inListNote: false) == .insertAbove("- [ ] "))
-    #expect(Markers.newlineAction(for: "\t3. third", caret: 1, inListNote: false) == .insertAbove("\t3. "))
-    #expect(Markers.newlineAction(for: "- [ ] milk", caret: 7, inListNote: false) == .continueWith("- [ ] "))
-    #expect(Markers.newlineAction(for: "- [ ] ", caret: 0, inListNote: false) == .endList)
-    #expect(Markers.newlineAction(for: "loose line", caret: 0, inListNote: true) == .plain)
-}
-
-@Test func listNotesAlwaysContinueWithCheckboxes() {
-    #expect(Markers.newlineAction(for: "list", inListNote: true) == .continueWith("- [ ] "))
-    #expect(Markers.newlineAction(for: "loose line", inListNote: true) == .continueWith("- [ ] "))
-    #expect(Markers.newlineAction(for: "", inListNote: true) == .plain)
+    #expect(Markers.newlineAction(for: "- [ ] milk", caret: 0) == .insertAbove("- [ ] "))
+    #expect(Markers.newlineAction(for: "- [x] milk", caret: 6) == .insertAbove("- [ ] "))
+    #expect(Markers.newlineAction(for: "\t3. third", caret: 1) == .insertAbove("\t3. "))
+    #expect(Markers.newlineAction(for: "- [ ] milk", caret: 7) == .continueWith("- [ ] "))
+    #expect(Markers.newlineAction(for: "- [ ] ", caret: 0) == .endList)
+    #expect(Markers.newlineAction(for: "loose line", caret: 0) == .plain)
 }
 
 // MARK: Line commands
@@ -103,21 +97,7 @@ import Testing
     #expect(PasteCleaner.clean("- [x] done\n- [ ] todo") == "- [x] done\n- [ ] todo")
 }
 
-@Test func pasteIntoListAddsMarkers() {
-    let cleaned = PasteCleaner.clean("• eggs\n\n• milk\n", linePrefix: "- [ ] ", prefixFirstLine: true, dropEmptyLines: true)
-    #expect(cleaned == "- [ ] eggs\n- [ ] milk")
-}
-
 @Test func pasteOntoExistingItemSkipsFirstPrefix() {
-    let cleaned = PasteCleaner.clean("eggs\nmilk", linePrefix: "- ", prefixFirstLine: false)
-    #expect(cleaned == "eggs\n- milk")
+    let cleaned = PasteCleaner.clean("• eggs\n\n• milk", linePrefix: "- [ ] ")
+    #expect(cleaned == "eggs\n\n- [ ] milk")
 }
-
-// MARK: Modes
-
-@Test func noteModes() {
-    #expect(NoteMode(text: "List\n- [ ] a") == .list)
-    #expect(NoteMode(text: "code\nlet x = 1") == .code)
-    #expect(NoteMode(text: "hello") == .plain)
-}
-

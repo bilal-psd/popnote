@@ -74,18 +74,14 @@ public enum Markers {
     }
 
     /// What Enter should do on `line` with the caret `caret` UTF-16 units into
-    /// it (nil: at the end). In a `list` note every non-empty plain line
-    /// (including the "list" keyword line) continues with a checkbox.
-    public static func newlineAction(for line: String, caret: Int? = nil, inListNote: Bool) -> NewlineAction {
+    /// it (nil: at the end).
+    public static func newlineAction(for line: String, caret: Int? = nil) -> NewlineAction {
         let parsed = parse(line)
         let isEmpty = parsed.content.trimmingCharacters(in: .whitespaces).isEmpty
         // Indent and markers are ASCII, so these counts are UTF-16 lengths too.
         let contentStart = parsed.indent.utf16.count + parsed.markerLength
         let beforeContent = caret.map { $0 <= contentStart } ?? false
-        guard let prefix = continuationPrefix(for: line) else {
-            if beforeContent { return .plain }
-            return inListNote && !isEmpty ? .continueWith(parsed.indent + marker(for: .checkbox(checked: false))) : .plain
-        }
+        guard let prefix = continuationPrefix(for: line) else { return .plain }
         if isEmpty { return .endList }
         if beforeContent {
             let kind: LineKind = parsed.kind == .checkbox(checked: true) ? .checkbox(checked: false) : parsed.kind

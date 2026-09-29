@@ -23,10 +23,10 @@ public enum Settings {
         public static let hotkeyKeyCode = "hotkeyKeyCode"
         public static let hotkeyModifiers = "hotkeyModifiers"
         public static let hotkeyLabel = "hotkeyLabel"
-        public static let keywordList = "keywordList"
-        public static let keywordCode = "keywordCode"
-        public static let keywordPin = "keywordPin"
         static let lastNoteID = "lastNoteID"
+        /// Renamed first-line keywords, from before keywords were removed.
+        static let legacyKeywords = ["keywordList", "keywordCode", "keywordPin"]
+        static let keywordsRemoved = "keywordsRemoved"
     }
 
     public enum Default {
@@ -65,14 +65,6 @@ public enum Settings {
     /// What happens to a checklist item when it's checked. Default: stays put.
     public static var checkedBehavior: CheckedBehavior {
         CheckedBehavior(rawValue: string(Key.checkedItems) ?? "") ?? .keep
-    }
-
-    public static var keywords: Keywords {
-        var k = Keywords.standard
-        if let v = string(Key.keywordList) { k.list = v.lowercased() }
-        if let v = string(Key.keywordCode) { k.code = v.lowercased() }
-        if let v = string(Key.keywordPin) { k.pin = v.lowercased() }
-        return k
     }
 
     // MARK: Appearance
@@ -114,6 +106,20 @@ public enum Settings {
         get { (defaults.object(forKey: Key.lastNoteID) as? NSNumber)?.int64Value }
         set { defaults.set(newValue.map { NSNumber(value: $0) }, forKey: Key.lastNoteID) }
     }
+
+    // MARK: Upgrades
+
+    /// Notes used to be pinned by a first line of "pin" (or a word renamed in
+    /// Settings). Until `removeKeywords()` runs, this is that word.
+    public static var legacyPinKeyword: String? {
+        guard !bool(Key.keywordsRemoved, false) else { return nil }
+        return string("keywordPin")?.lowercased() ?? "pin"
+    }
+
+    public static func removeKeywords() {
+        Key.legacyKeywords.forEach(defaults.removeObject(forKey:))
+        defaults.set(true, forKey: Key.keywordsRemoved)
+    }
 }
 
 public enum WindowPosition: String, CaseIterable {
@@ -123,17 +129,4 @@ public enum WindowPosition: String, CaseIterable {
     case remember
     /// Hanging under the menu bar icon.
     case menuBar
-}
-
-/// The trigger words, which you can rename in Settings.
-public struct Keywords: Equatable {
-    public var list = "list"
-    public var code = "code"
-    public var pin = "pin"
-
-    public static let standard = Keywords()
-    public static var current: Keywords { Settings.keywords }
-
-    /// First-line words that change how a note behaves.
-    public var firstLine: Set<String> { [list, code, pin] }
 }

@@ -6,20 +6,6 @@ import SwiftUI
 
 private typealias Key = PopnoteCore.Settings.Key
 
-struct SettingsView: View {
-    var body: some View {
-        TabView {
-            GeneralSettings().tabItem { Label("General", systemImage: "gearshape") }
-            AppearanceSettings().tabItem { Label("Appearance", systemImage: "paintbrush") }
-            WindowSettings().tabItem { Label("Window", systemImage: "macwindow") }
-            KeywordSettings().tabItem { Label("Keywords", systemImage: "textformat") }
-        }
-        .frame(width: 480)
-        .fixedSize(horizontal: false, vertical: true)
-        .font(Font(Fonts.mono(12) as CTFont))
-    }
-}
-
 // MARK: General
 
 private struct GeneralSettings: View {
@@ -50,7 +36,7 @@ private struct GeneralSettings: View {
                 }
             }
             Section {
-                LabeledContent("Open Popnote from anywhere") { HotkeyRecorder() }
+                HotkeyRecorder()
                 Toggle("Open at login", isOn: $launchAtLogin)
                     .onChange(of: launchAtLogin) { _, enabled in setLaunchAtLogin(enabled) }
                 if let loginError {
@@ -59,6 +45,8 @@ private struct GeneralSettings: View {
             } footer: {
                 Text("To change other shortcuts, add them for Popnote in System Settings › Keyboard › Keyboard Shortcuts › App Shortcuts, using the menu item's name.")
                     .font(.caption).foregroundStyle(.secondary)
+                    .multilineTextAlignment(.leading)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
         .formStyle(.grouped)
@@ -86,28 +74,37 @@ private struct AppearanceSettings: View {
 
     var body: some View {
         Form {
-            Picker("Theme", selection: $theme) {
-                ForEach(Theme.all, id: \.id) { Text($0.name).tag($0.id) }
-            }
-            Picker("Font", selection: $font) {
-                Text("Auto (Nerd Font if installed)").tag("")
-                ForEach(Fonts.installedMonospaced, id: \.self) { Text($0).tag($0) }
-            }
-            if !Fonts.hasNerdGlyphs {
-                Text("Install a Nerd Font (e.g. brew install --cask font-jetbrains-mono-nerd-font) for icons and powerline separators.")
-                    .font(.caption).foregroundStyle(.secondary)
-            }
-            Picker("Paper", selection: $paper) {
-                ForEach(Paper.allCases, id: \.rawValue) { Text($0.name).tag($0.rawValue) }
-            }
-            .pickerStyle(.segmented)
-            LabeledContent("Text size") {
-                HStack {
-                    Slider(value: $textSize, in: PopnoteCore.Settings.textSizeRange, step: 1)
-                    Text("\(Int(textSize)) pt").monospacedDigit().frame(width: 40, alignment: .trailing)
+            Section {
+                Picker("Theme", selection: $theme) {
+                    ForEach(Theme.all, id: \.id) { Text($0.name).tag($0.id) }
+                }
+                Picker("Font", selection: $font) {
+                    Text("Auto").tag("")
+                    Divider()
+                    ForEach(Fonts.installedMonospaced, id: \.self) { Text($0).tag($0) }
+                }
+                LabeledContent("Text size") {
+                    HStack {
+                        Slider(value: $textSize, in: PopnoteCore.Settings.textSizeRange, step: 1)
+                        Text("\(Int(textSize)) pt").monospacedDigit().frame(width: 40, alignment: .trailing)
+                    }
+                    .frame(width: 220)
+                }
+            } footer: {
+                if !Fonts.hasNerdGlyphs {
+                    Text("Auto picks a Nerd Font if one is installed, for icons and powerline separators. Try `brew install --cask font-jetbrains-mono-nerd-font`.")
+                        .font(.caption).foregroundStyle(.secondary)
+                        .multilineTextAlignment(.leading)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
-            Toggle("Translucent window", isOn: $translucent)
+            Section {
+                Picker("Paper", selection: $paper) {
+                    ForEach(Paper.allCases, id: \.rawValue) { Text($0.name).tag($0.rawValue) }
+                }
+                .pickerStyle(.segmented)
+                Toggle("Translucent window", isOn: $translucent)
+            }
         }
         .formStyle(.grouped)
     }
@@ -129,8 +126,12 @@ private struct WindowSettings: View {
             Section {
                 Toggle("Show in menu bar", isOn: $showInMenuBar)
                 Toggle("Show in Dock", isOn: $showInDock)
+            } footer: {
                 if !showInMenuBar && !showInDock {
-                    Text("Popnote will only open with \(hotkeyLabel).").font(.caption).foregroundStyle(.secondary)
+                    Text("Popnote will only open with \(hotkeyLabel).")
+                        .font(.caption).foregroundStyle(.secondary)
+                        .multilineTextAlignment(.leading)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
             Section {
@@ -139,36 +140,17 @@ private struct WindowSettings: View {
                     Text("Where I left it").tag(WindowPosition.remember.rawValue)
                     Text("Under the menu bar icon").tag(WindowPosition.menuBar.rawValue)
                 }
-                Toggle("Animate opening and closing", isOn: $animate)
-                Text("A quick fade and slide. Only fades when Reduce Motion is on.")
-                    .font(.caption).foregroundStyle(.secondary)
+                Toggle(isOn: $animate) {
+                    Text("Animate opening and closing")
+                    Text("A quick fade and slide. Only fades when Reduce Motion is on.")
+                }
             }
             Section {
                 Toggle("Hide when clicking outside", isOn: $hideOnClickOutside)
-                Toggle("Keep on top of other windows", isOn: $keepOnTop)
-                Text("Keep on top (⌘T) also stops clicks outside from hiding the window.")
-                    .font(.caption).foregroundStyle(.secondary)
-            }
-        }
-        .formStyle(.grouped)
-    }
-}
-
-// MARK: Keywords
-
-private struct KeywordSettings: View {
-    @AppStorage(Key.keywordList) private var list = ""
-    @AppStorage(Key.keywordCode) private var code = ""
-    @AppStorage(Key.keywordPin) private var pin = ""
-
-    var body: some View {
-        Form {
-            Section {
-                TextField("Checklist note", text: $list, prompt: Text(Keywords.standard.list))
-                TextField("Code note", text: $code, prompt: Text(Keywords.standard.code))
-                TextField("Pinned note", text: $pin, prompt: Text(Keywords.standard.pin))
-            } header: {
-                Text("First line of a note")
+                Toggle(isOn: $keepOnTop) {
+                    Text("Keep on top of other windows")
+                    Text("Also stops clicks outside from hiding it. ⌘T toggles this.")
+                }
             }
         }
         .formStyle(.grouped)
@@ -185,15 +167,14 @@ private struct HotkeyRecorder: View {
     @State private var monitor: Any?
 
     var body: some View {
-        VStack(alignment: .trailing, spacing: 2) {
+        LabeledContent {
             Button(monitor == nil ? label : "Type shortcut…") {
                 monitor == nil ? start() : stop()
             }
-            .frame(minWidth: 110)
-            if monitor != nil {
-                // macOS keeps its own shortcuts (e.g. ⌘Space); they never reach Popnote.
-                Text("Shortcuts macOS already uses won't register").font(.caption).foregroundStyle(.secondary)
-            }
+        } label: {
+            Text("Open Popnote from anywhere")
+            // macOS keeps its own shortcuts (e.g. ⌘Space); they never reach Popnote.
+            Text(monitor == nil ? "Click the shortcut to change it." : "Press the new keys, or Esc to cancel. macOS's own shortcuts won't work.")
         }
         .onDisappear { stop() }
     }
@@ -253,16 +234,72 @@ private struct HotkeyRecorder: View {
     }
 }
 
-final class SettingsWindowController: NSWindowController {
+/// Remembers the last pane shown, so Settings reopens on it.
+private final class SettingsTabs: NSTabViewController {
+    static let paneKey = "settingsPane"
+
+    override func tabView(_ tabView: NSTabView, didSelect item: NSTabViewItem?) {
+        super.tabView(tabView, didSelect: item)
+        UserDefaults.standard.set(selectedTabViewItemIndex, forKey: Self.paneKey)
+    }
+}
+
+/// Toolbar tabs, like the system's own settings windows. The window
+/// resizes to fit each tab, opens centred the first time and where it was
+/// left after that.
+final class SettingsWindowController: NSWindowController, NSWindowDelegate {
+    private static let positionKey = "settingsTopLeft"
+
     init() {
-        let window = NSWindow(contentViewController: NSHostingController(rootView: SettingsView()))
-        window.title = "Popnote Settings"
-        window.styleMask.remove(.resizable)
+        let tabs = SettingsTabs()
+        tabs.tabStyle = .toolbar
+        tabs.addTabViewItem(Self.tab("General", "gearshape", GeneralSettings()))
+        tabs.addTabViewItem(Self.tab("Appearance", "paintbrush", AppearanceSettings()))
+        tabs.addTabViewItem(Self.tab("Window", "macwindow", WindowSettings()))
+        let pane = UserDefaults.standard.integer(forKey: SettingsTabs.paneKey)
+        tabs.selectedTabViewItemIndex = tabs.tabViewItems.indices.contains(pane) ? pane : 0
+
+        let window = NSWindow(contentViewController: tabs)
+        window.toolbarStyle = .preference
+        // Sized by its pane and quick to reopen with ⌘,: no zoom or minimise.
+        window.styleMask.subtract([.resizable, .miniaturizable])
         window.isReleasedWhenClosed = false
-        window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-        window.center()
+        // Opens on the current Space instead of following you to every one.
+        window.collectionBehavior = [.moveToActiveSpace, .fullScreenAuxiliary]
         super.init(window: window)
+        window.delegate = self
+        placeWindow()
     }
 
     required init?(coder: NSCoder) { fatalError() }
+
+    /// The top-left corner is kept, not the frame: the height depends on the pane.
+    private func placeWindow() {
+        guard let window else { return }
+        if let saved = UserDefaults.standard.string(forKey: Self.positionKey) {
+            let topLeft = NSPointFromString(saved)
+            // Only if that spot is still on a screen (displays can change).
+            let inside = NSPoint(x: topLeft.x + 40, y: topLeft.y - 20)
+            if NSScreen.screens.contains(where: { $0.visibleFrame.contains(inside) }) {
+                window.setFrameTopLeftPoint(topLeft)
+                return
+            }
+        }
+        window.center()
+    }
+
+    func windowDidMove(_ notification: Notification) {
+        guard let frame = window?.frame else { return }
+        UserDefaults.standard.set(NSStringFromPoint(NSPoint(x: frame.minX, y: frame.maxY)), forKey: Self.positionKey)
+    }
+
+    private static func tab(_ title: String, _ symbol: String, _ view: some View) -> NSTabViewItem {
+        let host = NSHostingController(rootView: view.frame(width: 480).fixedSize(horizontal: false, vertical: true))
+        host.sizingOptions = .preferredContentSize
+        host.title = title
+        let item = NSTabViewItem(viewController: host)
+        item.label = title
+        item.image = NSImage(systemSymbolName: symbol, accessibilityDescription: title)
+        return item
+    }
 }

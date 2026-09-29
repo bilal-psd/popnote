@@ -191,7 +191,7 @@ final class NoteViewController: NSViewController, NSTextViewDelegate, NSTextFiel
         state.keepOnTop = Settings.keepOnTop
         if let note = current {
             state.position = "\(index + 1)/\(notes.count)"
-            state.pinned = note.isPinned
+            state.pinned = note.pinned
         } else {
             state.position = "new"
             state.pinned = draftPinned
@@ -343,11 +343,6 @@ final class NoteViewController: NSViewController, NSTextViewDelegate, NSTextFiel
             draftPinned.toggle()
             updateStatus()
             cornerInfo.flash(draftPinned ? "\(Glyph.pin) pinned" : "unpinned")
-            return
-        }
-        if note.isPinnedByKeyword && !note.pinned {
-            cornerInfo.flash("pinned by \"\(Keywords.current.pin)\" on line 1")
-            NSSound.beep()
             return
         }
         note.pinned.toggle()

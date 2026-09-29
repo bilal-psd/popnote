@@ -82,6 +82,16 @@ public final class NoteStore {
         }
     }
 
+    /// Pins every active note whose first line is `word` (trimmed, any case).
+    public func pinNotes(withFirstLine word: String) throws {
+        for note in try activeNotes() where !note.pinned {
+            let first = note.body.split(separator: "\n", maxSplits: 1, omittingEmptySubsequences: false).first ?? ""
+            if first.trimmingCharacters(in: .whitespaces).lowercased() == word {
+                try setPinned(id: note.id, true)
+            }
+        }
+    }
+
     public func moveToTrash(id: Int64, now: Date = Date()) throws {
         try run("UPDATE notes SET deleted_at = ? WHERE id = ?", [.date(now), .int(id)])
     }

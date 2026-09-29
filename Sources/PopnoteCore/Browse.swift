@@ -13,7 +13,7 @@ public enum Browse {
         let query = filter.trimmingCharacters(in: .whitespaces)
         let matching = query.isEmpty ? notes : notes.filter { $0.body.localizedCaseInsensitiveContains(query) }
         let byRecency = matching.sorted { $0.updatedAt != $1.updatedAt ? $0.updatedAt > $1.updatedAt : $0.id > $1.id }
-        return Sections(pinned: byRecency.filter(\.isPinned), recent: byRecency.filter { !$0.isPinned })
+        return Sections(pinned: byRecency.filter(\.pinned), recent: byRecency.filter { !$0.pinned })
     }
 
     /// Time since the last edit: "now", "5m", "2h", "3d".

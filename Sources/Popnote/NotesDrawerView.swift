@@ -225,8 +225,8 @@ final class NotesDrawerView: NSView, NSTextFieldDelegate {
                     NSBezierPath(roundedRect: rect, xRadius: 5, yRadius: 5).fill()
                 }
                 let meta = NSAttributedString(
-                    string: note.isPinned ? Glyph.pin : Browse.age(of: note, now: now),
-                    attributes: [.font: font, .foregroundColor: note.isPinned ? theme.accent : theme.dim])
+                    string: note.pinned ? Glyph.pin : Browse.age(of: note, now: now),
+                    attributes: [.font: font, .foregroundColor: note.pinned ? theme.accent : theme.dim])
                 let metaWidth = meta.size().width
                 let isCurrent = note.id == currentID()
                 let title = NoteText.title(of: note)

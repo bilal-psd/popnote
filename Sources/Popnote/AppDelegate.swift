@@ -16,7 +16,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         var theme = "", paper = "", font: String? = nil, textSize = 0.0, translucent = false
         var showInDock = false, showInMenuBar = false, keepOnTop = false
         var hotkeyKeyCode = -1, hotkeyModifiers = -1
-        var keywords = Keywords.standard
     }
     private var applied: Applied?
 
@@ -29,6 +28,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             alert.runModal()
             NSApp.terminate(nil)
             return
+        }
+        // Keep notes that were pinned by a "pin" first line pinned.
+        if let word = Settings.legacyPinKeyword, (try? store.pinNotes(withFirstLine: word)) != nil {
+            Settings.removeKeywords()
         }
         sweep()
 
@@ -69,8 +72,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let now = Applied(theme: Settings.theme, paper: Settings.paper, font: Settings.font, textSize: Settings.textSize,
                           translucent: Settings.translucent, showInDock: Settings.showInDock,
                           showInMenuBar: Settings.showInMenuBar, keepOnTop: Settings.keepOnTop,
-                          hotkeyKeyCode: Settings.hotkeyKeyCode, hotkeyModifiers: Settings.hotkeyModifiers,
-                          keywords: Settings.keywords)
+                          hotkeyKeyCode: Settings.hotkeyKeyCode, hotkeyModifiers: Settings.hotkeyModifiers)
         guard now != applied else { return }
         let previous = applied
         applied = now
@@ -159,6 +161,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             dismissPanel()
         } else {
             dismissPanel { if !otherWindowsOpen { NSApp.hide(nil) } }
+        }
+    }
+
+    /// ⌘W closes whichever window is in front: Settings, Trash or the panel.
+    @objc func closeWindow(_ sender: Any?) {
+        if let window = NSApp.keyWindow, window !== panel {
+            window.performClose(sender)
+        } else {
+            hidePanel()
         }
     }
 
@@ -363,7 +374,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         note.addItem(.separator())
         note.addItem(.separator())
         note.addItem(item("Keep on Top", #selector(NoteViewController.toggleKeepOnTop(_:)), "t", target: noteController))
-        note.addItem(item("Close", #selector(hidePanel), "w", target: self))
+        note.addItem(item("Close", #selector(closeWindow(_:)), "w", target: self))
         addSubmenu(note, to: main)
 
         // Sent to the focused editor (nil target = first responder).

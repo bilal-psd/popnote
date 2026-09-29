@@ -75,7 +75,6 @@ struct TrashView: View {
             .padding(10)
         }
         .frame(minWidth: 360, minHeight: 280)
-        .font(Font(Fonts.mono(12) as CTFont))
     }
 }
 
@@ -88,7 +87,7 @@ final class TrashWindowController: NSWindowController {
         window.title = "Trash"
         window.setContentSize(NSSize(width: 420, height: 380))
         window.isReleasedWhenClosed = false
-        window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        window.collectionBehavior = [.moveToActiveSpace, .fullScreenAuxiliary]
         window.center()
         super.init(window: window)
     }

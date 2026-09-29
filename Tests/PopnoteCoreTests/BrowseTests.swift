@@ -13,7 +13,7 @@ private func note(_ id: Int64, _ body: String, editedAgo minutes: Double, pinned
         note(1, "old", editedAgo: 300),
         note(2, "pinned old", editedAgo: 900, pinned: true),
         note(3, "fresh", editedAgo: 1),
-        note(4, "pin\nkeyword pinned", editedAgo: 5),
+        note(4, "pinned fresh", editedAgo: 5, pinned: true),
     ]
     let sections = Browse.sections(notes)
     #expect(sections.pinned.map(\.id) == [4, 2])

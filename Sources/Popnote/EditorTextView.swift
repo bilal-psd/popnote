@@ -6,8 +6,6 @@ import PopnoteCore
 final class EditorTextView: NSTextView, NSTextStorageDelegate {
     var onEscape: (() -> Void)?
 
-    private var mode = NoteMode.plain
-
     private enum DecorationKind { case checkbox(checked: Bool), bullet }
     /// A hidden marker with something drawn in its place.
     private struct Decoration {
@@ -77,10 +75,10 @@ final class EditorTextView: NSTextView, NSTextStorageDelegate {
     /// Called after ⌘C copied the whole note (nothing was selected).
     var onCopiedNote: (() -> Void)?
 
-    /// ⌘C with nothing selected copies the whole note, minus its keyword line.
+    /// ⌘C with nothing selected copies the whole note.
     override func copy(_ sender: Any?) {
         guard selectedRange().length == 0 else { return super.copy(sender) }
-        let text = NoteText.content(of: Note(id: 0, body: string, createdAt: Date(), updatedAt: Date()))
+        let text = string
         guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return NSSound.beep() }
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(text, forType: .string)
@@ -100,51 +98,34 @@ final class EditorTextView: NSTextView, NSTextStorageDelegate {
     private func restyle(_ storage: NSTextStorage) {
         let text = storage.string as NSString
         let full = NSRange(location: 0, length: text.length)
-        let newMode = NoteMode(text: storage.string)
-        if newMode != mode {
-            mode = newMode
-            // Not while the text storage is mid-edit: AppKit throws.
-            DispatchQueue.main.async { [weak self] in
-                guard let self else { return }
-                self.isContinuousSpellCheckingEnabled = self.mode != .code
-            }
-        }
         let base: [NSAttributedString.Key: Any] = [
             .font: bodyFont,
             .foregroundColor: theme.text,
         ]
         storage.setAttributes(base, range: full)
 
-        // Dim the keyword line ("list", "code", "pin").
-        if let keyword = Note.keyword(of: storage.string), Keywords.current.firstLine.contains(keyword) {
-            storage.addAttribute(.foregroundColor, value: theme.dim,
-                                 range: text.lineRange(for: NSRange(location: 0, length: 0)))
-        }
-
         var found: [Decoration] = []
-        if mode != .code {
-            text.enumerateSubstrings(in: full, options: [.byLines, .substringNotRequired]) { _, lineRange, _, _ in
-                let parsed = Markers.parse(text.substring(with: lineRange))
-                guard parsed.markerLength > 0 else { return }
-                let marker = NSRange(location: lineRange.location + (parsed.indent as NSString).length,
-                                     length: parsed.markerLength)
-                let content = NSRange(location: NSMaxRange(marker), length: NSMaxRange(lineRange) - NSMaxRange(marker))
-                switch parsed.kind {
-                case .checkbox(let checked):
-                    self.hideMarker(marker, in: storage, width: self.cell * CGFloat(Glyph.unchecked.count + 1))
-                    found.append(Decoration(range: marker, kind: .checkbox(checked: checked)))
-                    if checked {
-                        storage.addAttributes([.foregroundColor: self.theme.dim,
-                                               .strikethroughStyle: NSUnderlineStyle.single.rawValue], range: content)
-                    }
-                case .bullet:
-                    self.hideMarker(marker, in: storage, width: self.cell * 2)
-                    found.append(Decoration(range: marker, kind: .bullet))
-                case .numbered:
-                    storage.addAttribute(.foregroundColor, value: self.theme.accent, range: marker)
-                case .plain:
-                    break
+        text.enumerateSubstrings(in: full, options: [.byLines, .substringNotRequired]) { _, lineRange, _, _ in
+            let parsed = Markers.parse(text.substring(with: lineRange))
+            guard parsed.markerLength > 0 else { return }
+            let marker = NSRange(location: lineRange.location + (parsed.indent as NSString).length,
+                                 length: parsed.markerLength)
+            let content = NSRange(location: NSMaxRange(marker), length: NSMaxRange(lineRange) - NSMaxRange(marker))
+            switch parsed.kind {
+            case .checkbox(let checked):
+                self.hideMarker(marker, in: storage, width: self.cell * CGFloat(Glyph.unchecked.count + 1))
+                found.append(Decoration(range: marker, kind: .checkbox(checked: checked)))
+                if checked {
+                    storage.addAttributes([.foregroundColor: self.theme.dim,
+                                           .strikethroughStyle: NSUnderlineStyle.single.rawValue], range: content)
                 }
+            case .bullet:
+                self.hideMarker(marker, in: storage, width: self.cell * 2)
+                found.append(Decoration(range: marker, kind: .bullet))
+            case .numbered:
+                storage.addAttribute(.foregroundColor, value: self.theme.accent, range: marker)
+            case .plain:
+                break
             }
         }
         decorations = found
@@ -255,7 +236,7 @@ final class EditorTextView: NSTextView, NSTextStorageDelegate {
 
     override func insertText(_ string: Any, replacementRange: NSRange) {
         super.insertText(string, replacementRange: replacementRange)
-        guard mode != .code, !isApplyingEdit else { return }
+        guard !isApplyingEdit else { return }
         let typed = (string as? String) ?? (string as? NSAttributedString)?.string
         if typed == " " { expandCheckboxShortcut() }
     }
@@ -272,11 +253,10 @@ final class EditorTextView: NSTextView, NSTextStorageDelegate {
 
     /// Enter continues a list, or ends it on an empty item.
     override func insertNewline(_ sender: Any?) {
-        guard mode != .code else { return super.insertNewline(sender) }
         let selection = selectedRange()
         let line = lineRange(at: selection.location)
         let lineText = (string as NSString).substring(with: line)
-        switch Markers.newlineAction(for: lineText, caret: selection.location - line.location, inListNote: mode == .list) {
+        switch Markers.newlineAction(for: lineText, caret: selection.location - line.location) {
         case .plain:
             super.insertNewline(sender)
         case .continueWith(let prefix):
@@ -308,7 +288,7 @@ final class EditorTextView: NSTextView, NSTextStorageDelegate {
 
     /// Tab nests list items. Elsewhere it's a normal tab.
     override func insertTab(_ sender: Any?) {
-        guard mode != .code, selectedLines().contains(where: { Markers.parse($0).markerLength > 0 }) else {
+        guard selectedLines().contains(where: { Markers.parse($0).markerLength > 0 }) else {
             return super.insertTab(sender)
         }
         transformSelectedLines(Markers.indented)
@@ -321,22 +301,9 @@ final class EditorTextView: NSTextView, NSTextStorageDelegate {
     override func paste(_ sender: Any?) {
         guard let raw = NSPasteboard.general.string(forType: .string) else { return super.paste(sender) }
         let selection = selectedRange()
-        let cleaned: String
-        if mode == .code {
-            cleaned = raw.replacingOccurrences(of: "\r\n", with: "\n")
-        } else {
-            // Pasting into a list turns pasted lines into items of the same kind.
-            let line = lineRange(at: selection.location)
-            let lineText = (string as NSString).substring(with: line)
-            var prefix = Markers.continuationPrefix(for: lineText)
-            var prefixFirstLine = false
-            if mode == .list && prefix == nil {
-                prefix = Markers.marker(for: .checkbox(checked: false))
-                prefixFirstLine = lineText.isEmpty && line.location > 0
-            }
-            cleaned = PasteCleaner.clean(raw, linePrefix: prefix, prefixFirstLine: prefixFirstLine,
-                                         dropEmptyLines: mode == .list)
-        }
+        // Pasting into a list turns pasted lines into items of the same kind.
+        let lineText = (string as NSString).substring(with: lineRange(at: selection.location))
+        let cleaned = PasteCleaner.clean(raw, linePrefix: Markers.continuationPrefix(for: lineText))
         isApplyingEdit = true
         insertText(cleaned, replacementRange: selection)
         isApplyingEdit = false

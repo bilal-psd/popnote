@@ -5,13 +5,9 @@ import Foundation
 public enum PasteCleaner {
     private static let bulletCharacters: Set<Character> = ["•", "◦", "▪", "▫", "‣", "⁃", "●", "○", "■", "□", "–", "—", "·", "-", "*", "+"]
 
-    /// - Parameters:
-    ///   - linePrefix: marker to put in front of pasted lines (when pasting into a list).
-    ///   - prefixFirstLine: whether the first line gets `linePrefix` too. It doesn't
-    ///     when it lands on a line that already has a marker.
-    ///   - dropEmptyLines: used in `list` notes, where blank lines make no sense.
-    public static func clean(_ raw: String, linePrefix: String? = nil, prefixFirstLine: Bool = false,
-                             dropEmptyLines: Bool = false) -> String {
+    /// - Parameter linePrefix: marker to put in front of pasted lines after the
+    ///   first (when pasting onto a list item, which already has one).
+    public static func clean(_ raw: String, linePrefix: String? = nil) -> String {
         let lines = raw.replacingOccurrences(of: "\r\n", with: "\n")
             .replacingOccurrences(of: "\r", with: "\n")
             .components(separatedBy: "\n")
@@ -25,8 +21,7 @@ public enum PasteCleaner {
                 isCheckbox = false
                 line = stripListPrefix(line)
             }
-            if line.isEmpty && dropEmptyLines { continue }
-            if let linePrefix, !line.isEmpty, !isCheckbox, !out.isEmpty || prefixFirstLine {
+            if let linePrefix, !line.isEmpty, !isCheckbox, !out.isEmpty {
                 line = linePrefix + line
             }
             out.append(line)

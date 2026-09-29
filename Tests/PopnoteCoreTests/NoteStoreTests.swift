@@ -32,10 +32,10 @@ private let t0 = Date(timeIntervalSince1970: 1_800_000_000)
     let store = try NoteStore(url: nil)
     let flagged = try store.insert(body: "keep me", now: t0)
     try store.setPinned(id: flagged.id, true)
-    try store.insert(body: "pin\nwifi password", now: t0)
+    try store.insert(body: "pin\nnot pinned: keywords are gone", now: t0)
 
     try store.sweep(now: t0.addingTimeInterval(365 * day), ttl: ttl, trashRetention: retention)
-    #expect(try store.activeNotes().count == 2)
+    #expect(try store.activeNotes().map(\.id) == [flagged.id])
 }
 
 @Test func unpinningRestartsTheClock() throws {
@@ -91,11 +91,12 @@ private let t0 = Date(timeIntervalSince1970: 1_800_000_000)
     #expect(try store.activeNotes().map(\.id) == [a.id, b.id])
 }
 
-@Test func keywordIsFirstLineOnly() {
-    let note = Note(id: 1, body: "  PIN \nsomething", createdAt: t0, updatedAt: t0)
-    #expect(note.keyword == "pin")
-    #expect(note.isPinned)
-    let other = Note(id: 2, body: "hello\npin", createdAt: t0, updatedAt: t0)
-    #expect(!other.isPinned)
+@Test func pinsNotesByFirstLine() throws {
+    let store = try NoteStore(url: nil)
+    let a = try store.insert(body: "  PIN \nsomething", now: t0)
+    let b = try store.insert(body: "hello\npin", now: t0)
+    try store.pinNotes(withFirstLine: "pin")
+    #expect(try store.note(id: a.id)?.pinned == true)
+    #expect(try store.note(id: b.id)?.pinned == false)
 }
 
