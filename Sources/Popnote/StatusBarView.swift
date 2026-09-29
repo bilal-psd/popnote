@@ -15,11 +15,33 @@ final class StatusBarView: NSView {
         var right: String?
     }
 
+    /// Height and type sizes. `current` is read when views are laid out.
+    struct Size {
+        var height: CGFloat
+        var font: CGFloat
+        var icon: CGFloat
+        var iconWidth: CGFloat
+
+        static let compact = Size(height: 21, font: 10, icon: 12, iconWidth: 26)
+        static var current = compact
+    }
+
+    struct Colors {
+        var background, text, dim, key, highlight, icon, divider, border: NSColor
+    }
+
+    /// No accent colour: the status line stays quiet, in the theme's text colours.
+    func colors() -> Colors {
+        Colors(background: theme.surface, text: theme.text, dim: theme.dim,
+               key: theme.text.withAlphaComponent(0.75), highlight: theme.accent,
+               icon: theme.text, divider: theme.rule, border: theme.rule)
+    }
+
     var state = State() { didSet { needsDisplay = true } }
     var theme = Theme.all[0] {
         didSet {
             needsDisplay = true
-            drawerButton.theme = theme
+            drawerButton.needsDisplay = true
         }
     }
     /// Clicked to open the notes drawer.
@@ -33,13 +55,14 @@ final class StatusBarView: NSView {
         ("⌘K", "commands"), ("esc", "close"), ("⌘O", "notes"), ("⌘N", "new"), ("⌘P", "pin"), ("⌘⌫", "trash"),
     ]
 
-    static let height: CGFloat = 24
+    static var height: CGFloat { Size.current.height }
 
     override var intrinsicContentSize: NSSize { NSSize(width: NSView.noIntrinsicMetric, height: Self.height) }
     override var mouseDownCanMoveWindow: Bool { true }
 
     override init(frame: NSRect) {
         super.init(frame: frame)
+        drawerButton.bar = self
         addSubview(drawerButton)
     }
 
@@ -47,8 +70,7 @@ final class StatusBarView: NSView {
 
     override func layout() {
         super.layout()
-        drawerButton.frame = NSRect(x: 0, y: 0, width: drawerButton.preferredWidth(height: bounds.height),
-                                    height: bounds.height)
+        drawerButton.frame = NSRect(x: 0, y: 0, width: Size.current.iconWidth, height: bounds.height)
     }
 
     /// Shows `text` in place of the hints for a moment.
@@ -63,27 +85,28 @@ final class StatusBarView: NSView {
     }
 
     override func draw(_ dirtyRect: NSRect) {
-        theme.surface.setFill()
+        let c = colors()
+        c.background.setFill()
         bounds.fill()
-        theme.rule.setFill()
+        c.border.setFill()
         NSRect(x: 0, y: bounds.maxY - 1, width: bounds.width, height: 1).fill()
 
-        let font = Fonts.mono(11)
+        let font = Fonts.mono(Size.current.font)
         func text(_ string: String, _ color: NSColor, _ f: NSFont? = nil) -> NSAttributedString {
             NSAttributedString(string: string, attributes: [.font: f ?? font, .foregroundColor: color])
         }
 
         // The drawer button draws itself; text starts after it.
-        var x = drawerButton.preferredWidth(height: bounds.height)
+        var x = Size.current.iconWidth + 4
 
         // Position, expiry or pin, keep-on-top.
-        let left = NSMutableAttributedString(attributedString: text(" \(state.position)", theme.text))
+        let left = NSMutableAttributedString(attributedString: text(" \(state.position)", c.text))
         if state.pinned {
-            left.append(text("  \(Glyph.pin) \(state.pinnedByKeyword ? "pinned by keyword" : "pinned")", theme.accent))
+            left.append(text("  \(Glyph.pin) \(state.pinnedByKeyword ? "pinned by keyword" : "pinned")", c.highlight))
         } else if let expiry = state.expiry {
-            left.append(text("  \(Glyph.clock) \(expiry)", theme.dim))
+            left.append(text("  \(Glyph.clock) \(expiry)", c.dim))
         }
-        if state.keepOnTop { left.append(text("  \(Glyph.top) on top", theme.dim)) }
+        if state.keepOnTop { left.append(text("  \(Glyph.top) on top", c.dim)) }
         drawCentered(left, x: x)
         x += ceil(left.size().width)
 
@@ -91,16 +114,16 @@ final class StatusBarView: NSView {
         let available = bounds.width - x - 20
         let right: NSAttributedString
         if let message {
-            right = text(message, theme.accent)
+            right = text(message, c.highlight)
         } else if let override = state.right {
-            right = text(override, theme.dim)
+            right = text(override, c.dim)
         } else {
             let hintLine = NSMutableAttributedString()
             for hint in hints {
                 let piece = NSMutableAttributedString()
-                if hintLine.length > 0 { piece.append(text("  ", theme.dim)) }
-                piece.append(text(hint.key, theme.text.withAlphaComponent(0.75)))
-                piece.append(text(" \(hint.label)", theme.dim))
+                if hintLine.length > 0 { piece.append(text("  ", c.dim)) }
+                piece.append(text(hint.key, c.key))
+                piece.append(text(" \(hint.label)", c.dim))
                 guard hintLine.size().width + piece.size().width <= available else { break }
                 hintLine.append(piece)
             }
@@ -116,11 +139,13 @@ final class StatusBarView: NSView {
     }
 }
 
-/// The accent-coloured block at the left of the status line. Opens the notes
-/// drawer (same as ⌘O).
+/// The icon at the left of the status line. Opens the notes drawer (same as ⌘O).
 final class DrawerButton: NSView {
     var onClick: (() -> Void)?
-    var theme = Theme.all[0] { didSet { needsDisplay = true } }
+    weak var bar: StatusBarView?
+    private var hovering = false {
+        didSet { needsDisplay = true }
+    }
 
     override var mouseDownCanMoveWindow: Bool { false }
 
@@ -131,32 +156,28 @@ final class DrawerButton: NSView {
 
     required init?(coder: NSCoder) { fatalError() }
 
-    private var icon: NSAttributedString {
-        NSAttributedString(string: " \(Glyph.notes) ", attributes: [
-            .font: Fonts.mono(13, weight: .bold), .foregroundColor: theme.background,
-        ])
-    }
-
-    /// Powerline arrow, sized to fill the bar's height.
-    private func separator(height: CGFloat) -> NSAttributedString? {
-        guard let glyph = Glyph.separatorRight else { return nil }
-        let probe = Fonts.mono(12)
-        let size = 12 * height / (probe.ascender - probe.descender)
-        return NSAttributedString(string: glyph, attributes: [.font: Fonts.mono(size), .foregroundColor: theme.accent])
-    }
-
-    func preferredWidth(height: CGFloat) -> CGFloat {
-        ceil(icon.size().width) + 4 + (separator(height: height).map { floor($0.size().width) } ?? 6)
-    }
-
     override func draw(_ dirtyRect: NSRect) {
-        let blockWidth = ceil(icon.size().width) + 4
-        theme.accent.setFill()
-        NSRect(x: 0, y: 0, width: blockWidth, height: bounds.height).fill()
+        guard let c = bar?.colors() else { return }
+        if hovering {
+            c.text.withAlphaComponent(0.08).setFill()
+            bounds.fill()
+        }
+        let icon = NSAttributedString(string: Glyph.notes, attributes: [.font: Fonts.mono(StatusBarView.Size.current.icon), .foregroundColor: c.icon])
         let size = icon.size()
-        icon.draw(at: NSPoint(x: 2, y: ((bounds.height - size.height) / 2).rounded()))
-        separator(height: bounds.height)?.draw(at: NSPoint(x: blockWidth, y: 0))
+        icon.draw(at: NSPoint(x: ((bounds.width - size.width) / 2).rounded(), y: ((bounds.height - size.height) / 2).rounded()))
+        c.divider.setFill()
+        let inset = (bounds.height * 0.22).rounded()
+        NSRect(x: bounds.maxX - 1, y: inset, width: 1, height: bounds.height - inset * 2).fill()
     }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        trackingAreas.forEach(removeTrackingArea)
+        addTrackingArea(NSTrackingArea(rect: bounds, options: [.mouseEnteredAndExited, .activeAlways], owner: self))
+    }
+
+    override func mouseEntered(with event: NSEvent) { hovering = true }
+    override func mouseExited(with event: NSEvent) { hovering = false }
 
     override func resetCursorRects() {
         addCursorRect(bounds, cursor: .pointingHand)
@@ -200,12 +221,13 @@ final class SearchBarView: NSView {
     required init?(coder: NSCoder) { fatalError() }
 
     private func applyTheme() {
-        prompt.font = Fonts.mono(12, weight: .bold)
+        prompt.font = Fonts.mono(StatusBarView.Size.current.font + 1, weight: .bold)
         prompt.textColor = theme.accent
-        field.font = Fonts.mono(12)
+        let size = StatusBarView.Size.current.font + 1
+        field.font = Fonts.mono(size)
         field.textColor = theme.text
         field.placeholderAttributedString = NSAttributedString(
-            string: "search notes", attributes: [.font: Fonts.mono(12), .foregroundColor: theme.dim])
+            string: "search notes", attributes: [.font: Fonts.mono(size), .foregroundColor: theme.dim])
         needsDisplay = true
     }
 
