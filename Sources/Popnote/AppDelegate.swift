@@ -9,6 +9,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var hotKey: HotKey?
     private var trashWindow: TrashWindowController?
     private var settingsWindow: SettingsWindowController?
+    private var welcomeWindow: WelcomeWindowController?
     private var sweepTimer: Timer?
 
     /// The settings as last applied, so unrelated defaults writes are ignored.
@@ -20,6 +21,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var applied: Applied?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        LegacyDefaults.migrate()
         do {
             store = try NoteStore(url: NoteStore.defaultURL())
         } catch {
@@ -47,7 +49,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         NSWorkspace.shared.notificationCenter.addObserver(
             self, selector: #selector(sweep), name: NSWorkspace.didWakeNotification, object: nil)
 
-        showPanel()
+        if WelcomeWindowController.hasBeenSeen {
+            showPanel()
+        } else {
+            welcomeWindow = WelcomeWindowController { [weak self] in
+                self?.welcomeWindow = nil
+                self?.showPanel()
+            }
+            NSApp.activate(ignoringOtherApps: true)
+            welcomeWindow?.showWindow(nil)
+        }
     }
 
     /// Clicking the Dock icon (when shown) opens the panel.
@@ -342,7 +353,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     private func setUpStatusItem() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-        statusItem.button?.image = NSImage(systemSymbolName: "note.text", accessibilityDescription: "Popnote")
+        // Drawn by scripts/icon.swift; the SF Symbol covers `swift run`, which has no bundle.
+        let icon = Bundle.main.image(forResource: "MenuBarIcon")
+            ?? NSImage(systemSymbolName: "note.text", accessibilityDescription: "Popnote")
+        icon?.isTemplate = true
+        icon?.accessibilityDescription = "Popnote"
+        statusItem.button?.image = icon
         statusItem.button?.target = self
         statusItem.button?.action = #selector(statusItemClicked(_:))
         statusItem.button?.sendAction(on: [.leftMouseUp, .rightMouseUp])
