@@ -24,7 +24,7 @@ struct SettingsView: View {
 
 private struct GeneralSettings: View {
     @AppStorage(Key.expiryHours) private var expiryHours = PopnoteCore.Settings.Default.expiryHours
-    @AppStorage(Key.voidDays) private var voidDays = PopnoteCore.Settings.Default.voidDays
+    @AppStorage(Key.trashDays) private var trashDays = PopnoteCore.Settings.Default.trashDays
     @AppStorage(Key.checkedItems) private var checkedItems = CheckedBehavior.keep.rawValue
     @AppStorage(Key.obsidianVault) private var obsidianVault = ""
     @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
@@ -39,7 +39,7 @@ private struct GeneralSettings: View {
                     Text("1 week").tag(168.0)
                     Text("2 weeks").tag(336.0)
                 }
-                Picker("The Void keeps notes for", selection: $voidDays) {
+                Picker("Trash keeps notes for", selection: $trashDays) {
                     Text("1 day").tag(1.0)
                     Text("7 days").tag(7.0)
                     Text("30 days").tag(30.0)

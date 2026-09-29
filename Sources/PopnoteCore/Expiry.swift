@@ -1,7 +1,7 @@
 import Foundation
 
 public enum Expiry {
-    /// When an unpinned note moves to The Void. Nil for pinned notes.
+    /// When an unpinned note moves to Trash. Nil for pinned notes.
     public static func expiresAt(_ note: Note, ttl: TimeInterval) -> Date? {
         note.isPinned ? nil : note.updatedAt.addingTimeInterval(ttl)
     }

@@ -2,8 +2,8 @@ import AppKit
 import PopnoteCore
 import SwiftUI
 
-/// The Void: deleted and expired notes, restorable until they age out.
-final class VoidModel: ObservableObject {
+/// Trash: deleted and expired notes, restorable until they age out.
+final class TrashModel: ObservableObject {
     @Published var notes: [Note] = []
     private let store: NoteStore
     private let onRestore: (Note) -> Void
@@ -15,7 +15,7 @@ final class VoidModel: ObservableObject {
     }
 
     func reload() {
-        notes = (try? store.voidNotes()) ?? []
+        notes = (try? store.trashedNotes()) ?? []
     }
 
     func restore(_ note: Note) {
@@ -24,28 +24,28 @@ final class VoidModel: ObservableObject {
         onRestore(note)
     }
 
-    func emptyVoid() {
+    func emptyTrash() {
         let alert = NSAlert()
-        alert.messageText = "Empty The Void?"
+        alert.messageText = "Empty Trash?"
         alert.informativeText = "\(notes.count) note(s) will be deleted permanently. This can't be undone."
         alert.addButton(withTitle: "Empty")
         alert.addButton(withTitle: "Cancel")
         alert.buttons[0].hasDestructiveAction = true
         guard alert.runModal() == .alertFirstButtonReturn else { return }
-        try? store.emptyVoid()
+        try? store.emptyTrash()
         reload()
     }
 }
 
-struct VoidView: View {
-    @ObservedObject var model: VoidModel
-    private let retentionDays = Int(Settings.voidRetention / 86400)
+struct TrashView: View {
+    @ObservedObject var model: TrashModel
+    private let retentionDays = Int(Settings.trashRetention / 86400)
     private let relative = RelativeDateTimeFormatter()
 
     var body: some View {
         VStack(spacing: 0) {
             if model.notes.isEmpty {
-                ContentUnavailableView("The Void is empty", systemImage: "circle.dashed",
+                ContentUnavailableView("Trash is empty", systemImage: "trash",
                                        description: Text("Deleted and expired notes wait here for \(retentionDays) days."))
             } else {
                 List(model.notes) { note in
@@ -68,7 +68,7 @@ struct VoidView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Spacer()
-                Button("Empty The Void…") { model.emptyVoid() }
+                Button("Empty Trash…") { model.emptyTrash() }
                     .disabled(model.notes.isEmpty)
             }
             .padding(10)
@@ -78,13 +78,13 @@ struct VoidView: View {
     }
 }
 
-final class VoidWindowController: NSWindowController {
-    let model: VoidModel
+final class TrashWindowController: NSWindowController {
+    let model: TrashModel
 
-    init(model: VoidModel) {
+    init(model: TrashModel) {
         self.model = model
-        let window = NSWindow(contentViewController: NSHostingController(rootView: VoidView(model: model)))
-        window.title = "The Void"
+        let window = NSWindow(contentViewController: NSHostingController(rootView: TrashView(model: model)))
+        window.title = "Trash"
         window.setContentSize(NSSize(width: 420, height: 380))
         window.isReleasedWhenClosed = false
         window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]

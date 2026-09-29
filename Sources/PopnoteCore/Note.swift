@@ -7,7 +7,7 @@ public struct Note: Identifiable, Equatable {
     public var updatedAt: Date
     /// Pinned with ⌘P or the pin button. See `isPinned` for the effective state.
     public var pinned: Bool
-    /// Set when the note is in The Void.
+    /// Set when the note is in Trash.
     public var deletedAt: Date?
 
     public init(id: Int64, body: String, createdAt: Date, updatedAt: Date, pinned: Bool = false, deletedAt: Date? = nil) {
@@ -35,7 +35,7 @@ public struct Note: Identifiable, Equatable {
 
     public var isBlank: Bool { body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
 
-    /// First non-empty line, for lists like The Void.
+    /// First non-empty line, for lists like Trash.
     public var preview: String {
         body.split(separator: "\n").first(where: { !$0.trimmingCharacters(in: .whitespaces).isEmpty })
             .map { String($0).trimmingCharacters(in: .whitespaces) } ?? ""

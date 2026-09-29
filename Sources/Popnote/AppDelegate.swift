@@ -7,7 +7,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var noteController: NoteViewController!
     private var statusItem: NSStatusItem!
     private var hotKey: HotKey?
-    private var voidWindow: VoidWindowController?
+    private var trashWindow: TrashWindowController?
     private var settingsWindow: SettingsWindowController?
     private var sweepTimer: Timer?
 
@@ -59,9 +59,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     @objc private func sweep() {
-        _ = try? store.sweep(ttl: Settings.noteTTL, voidRetention: Settings.voidRetention)
+        _ = try? store.sweep(ttl: Settings.noteTTL, trashRetention: Settings.trashRetention)
         noteController?.refresh()
-        voidWindow?.model.reload()
+        trashWindow?.model.reload()
     }
 
     // MARK: Settings
@@ -99,11 +99,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     /// Palette commands that live at the app level.
     private func appCommands() -> [Command] {
         var commands = [
-            Command("Open the void", "⌘⇧⌫") { [weak self] in self?.showVoid(nil) },
+            Command("Open trash", "⌘⇧⌫") { [weak self] in self?.showTrash(nil) },
             Command("Settings", "⌘,") { [weak self] in self?.showSettings(nil) },
             Command("Bigger text", "⌘=") { [weak self] in self?.biggerText(nil) },
             Command("Smaller text", "⌘-") { [weak self] in self?.smallerText(nil) },
-            Command("Hide", "esc") { [weak self] in self?.hidePanel() },
+            Command("Close window", "esc") { [weak self] in self?.hidePanel() },
             Command("Quit Popnote", "⌘Q") { NSApp.terminate(nil) },
         ]
         for theme in Theme.all where theme.id != Settings.theme {
@@ -155,7 +155,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     /// Hides the panel and hands focus back to the previous app.
     @objc func hidePanel() {
         panel.orderOut(nil)
-        if settingsWindow?.window?.isVisible != true && voidWindow?.window?.isVisible != true {
+        if settingsWindow?.window?.isVisible != true && trashWindow?.window?.isVisible != true {
             NSApp.hide(nil)
         }
     }
@@ -187,17 +187,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         noteController.newNote(nil)
     }
 
-    @objc func showVoid(_ sender: Any?) {
-        if voidWindow == nil {
-            let model = VoidModel(store: store) { [weak self] note in
+    @objc func showTrash(_ sender: Any?) {
+        if trashWindow == nil {
+            let model = TrashModel(store: store) { [weak self] note in
                 self?.noteController.reload(keeping: note.id)
                 self?.showPanel()
             }
-            voidWindow = VoidWindowController(model: model)
+            trashWindow = TrashWindowController(model: model)
         }
-        voidWindow?.model.reload()
+        trashWindow?.model.reload()
         NSApp.activate(ignoringOtherApps: true)
-        voidWindow?.showWindow(nil)
+        trashWindow?.showWindow(nil)
     }
 
     // MARK: Menu bar item
@@ -218,7 +218,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
         let menu = NSMenu()
         menu.addItem(item("New Note", #selector(newNoteFromMenuBar(_:)), target: self))
-        menu.addItem(item("The Void…", #selector(showVoid(_:)), target: self))
+        menu.addItem(item("Trash…", #selector(showTrash(_:)), target: self))
         menu.addItem(item("Settings…", #selector(showSettings(_:)), target: self))
         menu.addItem(.separator())
         menu.addItem(item("Quit Popnote", #selector(NSApplication.terminate(_:)), target: NSApp))
@@ -265,10 +265,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         note.addItem(item("Newest Note", #selector(NoteViewController.jumpToNewest(_:)), "0", target: noteController))
         note.addItem(.separator())
         note.addItem(item("Pin / Unpin", #selector(NoteViewController.togglePin(_:)), "p", target: noteController))
-        note.addItem(item("Move to The Void", #selector(NoteViewController.deleteNote(_:)), backspace, target: noteController))
-        let void = item("The Void…", #selector(showVoid(_:)), backspace, target: self)
-        void.keyEquivalentModifierMask = [.command, .shift]
-        note.addItem(void)
+        note.addItem(item("Move to Trash", #selector(NoteViewController.deleteNote(_:)), backspace, target: noteController))
+        let trash = item("Trash…", #selector(showTrash(_:)), backspace, target: self)
+        trash.keyEquivalentModifierMask = [.command, .shift]
+        note.addItem(trash)
         note.addItem(.separator())
         note.addItem(item("Copy Note Text", #selector(NoteViewController.copyNoteText(_:)), "C", target: noteController))
         let export = NSMenu(title: "Export")
@@ -289,9 +289,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
         // Sent to the focused editor (nil target = first responder).
         let format = NSMenu(title: "Format")
-        let cycle = item("Cycle Line Type", #selector(EditorTextView.cycleLineType(_:)), "m")
-        cycle.keyEquivalentModifierMask = [.command, .shift]
-        format.addItem(cycle)
         format.addItem(item("Check / Uncheck", #selector(EditorTextView.toggleCheckbox(_:)), "\r"))
         format.addItem(.separator())
         format.addItem(item("Bigger", #selector(biggerText(_:)), "=", target: self))

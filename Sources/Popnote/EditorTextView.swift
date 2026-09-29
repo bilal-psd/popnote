@@ -315,11 +315,6 @@ final class EditorTextView: NSTextView, NSTextStorageDelegate {
 
     // MARK: Commands (Format menu)
 
-    /// ⌘⇧M: plain → checkbox → bullet → numbered → plain.
-    @objc func cycleLineType(_ sender: Any?) {
-        transformSelectedLines(Markers.cycled)
-    }
-
     /// ⌘↩: check or uncheck the item under the caret.
     @objc func toggleCheckbox(_ sender: Any?) {
         toggleLine(at: selectedRange().location)

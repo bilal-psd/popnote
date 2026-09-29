@@ -8,7 +8,7 @@ public enum StoreError: Error {
 private let SQLITE_TRANSIENT = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
 
 /// All notes, in one SQLite table. Active notes have `deleted_at` NULL;
-/// notes in The Void have it set.
+/// notes in Trash have it set.
 public final class NoteStore {
     private var db: OpaquePointer?
 
@@ -50,8 +50,8 @@ public final class NoteStore {
         try query("SELECT * FROM notes WHERE deleted_at IS NULL ORDER BY created_at, id")
     }
 
-    /// Notes in The Void, most recently deleted first.
-    public func voidNotes() throws -> [Note] {
+    /// Notes in Trash, most recently deleted first.
+    public func trashedNotes() throws -> [Note] {
         try query("SELECT * FROM notes WHERE deleted_at IS NOT NULL ORDER BY deleted_at DESC, id DESC")
     }
 
@@ -76,40 +76,40 @@ public final class NoteStore {
         try run("UPDATE notes SET pinned = ? WHERE id = ?", [.int(pinned ? 1 : 0), .int(id)])
     }
 
-    public func moveToVoid(id: Int64, now: Date = Date()) throws {
+    public func moveToTrash(id: Int64, now: Date = Date()) throws {
         try run("UPDATE notes SET deleted_at = ? WHERE id = ?", [.date(now), .int(id)])
     }
 
-    /// Brings a note back from The Void. Its expiry clock restarts so it
+    /// Brings a note back from Trash. Its expiry clock restarts so it
     /// doesn't vanish again on the next sweep.
     public func restore(id: Int64, now: Date = Date()) throws {
         try run("UPDATE notes SET deleted_at = NULL, updated_at = ? WHERE id = ?", [.date(now), .int(id)])
     }
 
-    /// Permanently removes one note. Used for blank notes, which skip The Void.
+    /// Permanently removes one note. Used for blank notes, which skip Trash.
     public func purge(id: Int64) throws {
         try run("DELETE FROM notes WHERE id = ?", [.int(id)])
     }
 
-    public func emptyVoid() throws {
+    public func emptyTrash() throws {
         try run("DELETE FROM notes WHERE deleted_at IS NOT NULL")
     }
 
-    /// Moves expired notes to The Void and permanently removes notes that
-    /// have been in The Void longer than `voidRetention`. Blank expired notes
+    /// Moves expired notes to Trash and permanently removes notes that
+    /// have been in Trash longer than `trashRetention`. Blank expired notes
     /// are removed outright. Returns true if anything changed.
     @discardableResult
-    public func sweep(now: Date = Date(), ttl: TimeInterval, voidRetention: TimeInterval) throws -> Bool {
+    public func sweep(now: Date = Date(), ttl: TimeInterval, trashRetention: TimeInterval) throws -> Bool {
         var changed = false
         for note in try activeNotes() where Expiry.isExpired(note, now: now, ttl: ttl) {
             if note.isBlank {
                 try purge(id: note.id)
             } else {
-                try moveToVoid(id: note.id, now: now)
+                try moveToTrash(id: note.id, now: now)
             }
             changed = true
         }
-        let cutoff = now.addingTimeInterval(-voidRetention)
+        let cutoff = now.addingTimeInterval(-trashRetention)
         try run("DELETE FROM notes WHERE deleted_at IS NOT NULL AND deleted_at <= ?", [.date(cutoff)])
         if sqlite3_changes(db) > 0 { changed = true }
         return changed

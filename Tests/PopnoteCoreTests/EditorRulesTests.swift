@@ -44,14 +44,6 @@ import Testing
 
 // MARK: Line commands
 
-@Test func cycleGoesThroughAllKinds() {
-    var line = "milk"
-    line = Markers.cycled(line); #expect(line == "- [ ] milk")
-    line = Markers.cycled(line); #expect(line == "- milk")
-    line = Markers.cycled(line); #expect(line == "1. milk")
-    line = Markers.cycled(line); #expect(line == "milk")
-}
-
 @Test func indentAndOutdent() {
     #expect(Markers.indented("- a") == "\t- a")
     #expect(Markers.outdented("\t- a") == "- a")

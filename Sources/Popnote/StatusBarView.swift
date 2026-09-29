@@ -24,7 +24,7 @@ final class StatusBarView: NSView {
 
     /// The most useful shortcuts, dropped from the end when space runs out.
     private let hints: [(key: String, label: String)] = [
-        ("⌘K", "commands"), ("⌘N", "new"), ("⌘[ ⌘]", "browse"), ("⌘P", "pin"), ("⌘⌫", "void"), ("esc", "hide"),
+        ("⌘K", "commands"), ("esc", "close"), ("⌘N", "new"), ("⌘[ ⌘]", "browse"), ("⌘P", "pin"), ("⌘⌫", "trash"),
     ]
 
     static let height: CGFloat = 24

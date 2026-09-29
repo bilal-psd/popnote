@@ -5,7 +5,7 @@ import Foundation
 public enum Settings {
     public enum Key {
         public static let expiryHours = "expiryHours"
-        public static let voidDays = "voidDays"
+        public static let trashDays = "voidDays" // stored under its original name
         public static let checkedItems = "checkedItems"
         public static let theme = "theme"
         public static let paper = "paper"
@@ -29,7 +29,7 @@ public enum Settings {
 
     public enum Default {
         public static let expiryHours = 72.0
-        public static let voidDays = 7.0
+        public static let trashDays = 7.0
         public static let textSize = 14.0
         /// kVK_ANSI_A and Carbon's optionKey: ⌥A.
         public static let hotkeyKeyCode = 0
@@ -57,8 +57,8 @@ public enum Settings {
     /// How long an unpinned note lives after its last edit. Default 3 days.
     public static var noteTTL: TimeInterval { double(Key.expiryHours, Default.expiryHours) * 3600 }
 
-    /// How long a note stays in The Void before it's gone for good. Default 7 days.
-    public static var voidRetention: TimeInterval { double(Key.voidDays, Default.voidDays) * 86400 }
+    /// How long a note stays in Trash before it's gone for good. Default 7 days.
+    public static var trashRetention: TimeInterval { double(Key.trashDays, Default.trashDays) * 86400 }
 
     /// What happens to a checklist item when it's checked. Default: stays put.
     public static var checkedBehavior: CheckedBehavior {

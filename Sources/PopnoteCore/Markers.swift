@@ -82,19 +82,6 @@ public enum Markers {
         return isEmpty ? .endList : .continueWith(prefix)
     }
 
-    /// ⌘⇧M: plain → checkbox → bullet → numbered → plain.
-    public static func cycled(_ line: String) -> String {
-        let parsed = parse(line)
-        let next: LineKind
-        switch parsed.kind {
-        case .plain: next = .checkbox(checked: false)
-        case .checkbox: next = .bullet
-        case .bullet: next = .numbered(1)
-        case .numbered: next = .plain
-        }
-        return parsed.indent + marker(for: next) + parsed.content
-    }
-
     public static func indented(_ line: String) -> String {
         "\t" + line
     }

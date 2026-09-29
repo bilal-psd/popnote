@@ -9,7 +9,7 @@ import PopnoteCore
 final class NoteViewController: NSViewController, NSTextViewDelegate, NSTextFieldDelegate, NSMenuItemValidation {
     var onHide: (() -> Void)?
     var onOpenSettings: (() -> Void)?
-    /// App-level commands (themes, The Void, settings…) for the palette.
+    /// App-level commands (themes, Trash, settings…) for the palette.
     var appCommands: () -> [Command] = { [] }
 
     private let store: NoteStore
@@ -236,13 +236,13 @@ final class NoteViewController: NSViewController, NSTextViewDelegate, NSTextFiel
         if note.isBlank {
             try? store.purge(id: note.id)
         } else {
-            try? store.moveToVoid(id: note.id)
+            try? store.moveToTrash(id: note.id)
         }
         notes.remove(at: index)
         // Show the next newer note, or the previous one if this was the newest.
         index = notes.isEmpty ? 0 : min(index, notes.count - 1)
         show()
-        if !note.isBlank { statusBar.flash("moved to the void  ⌘⇧⌫ to restore") }
+        if !note.isBlank { statusBar.flash("moved to trash  ⌘⇧⌫ to restore") }
     }
 
     // MARK: Appearance
@@ -278,9 +278,8 @@ final class NoteViewController: NSViewController, NSTextViewDelegate, NSTextFiel
             Command(current?.isPinned == true || (current == nil && draftPinned) ? "Unpin note" : "Pin note", "⌘P") {
                 [weak self] in self?.togglePin(nil)
             },
-            Command("Move note to the void", "⌘⌫") { [weak self] in self?.deleteNote(nil) },
+            Command("Move note to trash", "⌘⌫") { [weak self] in self?.deleteNote(nil) },
             Command("Search notes", "⌘F") { [weak self] in self?.toggleSearch(nil) },
-            Command("Cycle line type", "⌘⇧M") { editor.cycleLineType(nil) },
             Command("Check / uncheck item", "⌘↩") { editor.toggleCheckbox(nil) },
             Command(Settings.keepOnTop ? "Stop keeping on top" : "Keep on top", "⌘⇧T") { [weak self] in
                 self?.toggleKeepOnTop(nil)
