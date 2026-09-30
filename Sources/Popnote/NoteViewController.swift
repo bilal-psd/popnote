@@ -8,7 +8,7 @@ import PopnoteCore
 ///
 /// Notes are ordered oldest → newest. `index == notes.count` is the blank
 /// draft past the newest note; it only becomes a real note once you type.
-final class NoteViewController: NSViewController, NSTextViewDelegate, NSTextFieldDelegate, NSMenuItemValidation {
+final class NoteViewController: NSViewController, NSTextViewDelegate, NSMenuItemValidation {
     var onHide: (() -> Void)?
     var onOpenTrash: (() -> Void)?
 
@@ -28,7 +28,6 @@ final class NoteViewController: NSViewController, NSTextViewDelegate, NSTextFiel
     /// width, so any starting width would stay added on and lines would wrap
     /// off the right edge.
     private let textView = EditorTextView(frame: .zero)
-    private let searchBar = SearchBarView()
     private let cornerInfo = CornerInfoView()
     private let shortcuts = ShortcutOverlayView()
     private var shortcutTimer: Timer?
@@ -40,9 +39,6 @@ final class NoteViewController: NSViewController, NSTextViewDelegate, NSTextFiel
     private lazy var swipe = SwipeTransition(target: scrollView)
     /// Reduce Motion fallback: the note switches once the swipe passes a threshold.
     private var swipeFired = false
-
-    private var searchMatchIDs: [Int64] = []
-    private var searchCursor = 0
 
     private var current: Note? { index < notes.count ? notes[index] : nil }
 
@@ -91,24 +87,16 @@ final class NoteViewController: NSViewController, NSTextViewDelegate, NSTextFiel
             self.scrollToTop()
         }
 
-        searchBar.field.delegate = self
-        searchBar.isHidden = true
-
-        let column = NSStackView(views: [scrollView, searchBar])
-        column.orientation = .vertical
-        column.spacing = 0
-        column.translatesAutoresizingMaskIntoConstraints = false
-        root.addSubview(column)
+        scrollView.translatesAutoresizingMaskIntoConstraints = false
+        root.addSubview(scrollView)
         NSLayoutConstraint.activate([
-            column.topAnchor.constraint(equalTo: root.topAnchor),
-            column.bottomAnchor.constraint(equalTo: root.bottomAnchor),
-            column.leadingAnchor.constraint(equalTo: root.leadingAnchor),
-            column.trailingAnchor.constraint(equalTo: root.trailingAnchor),
-            scrollView.widthAnchor.constraint(equalTo: column.widthAnchor),
-            searchBar.widthAnchor.constraint(equalTo: column.widthAnchor),
+            scrollView.topAnchor.constraint(equalTo: root.topAnchor),
+            scrollView.bottomAnchor.constraint(equalTo: root.bottomAnchor),
+            scrollView.leadingAnchor.constraint(equalTo: root.leadingAnchor),
+            scrollView.trailingAnchor.constraint(equalTo: root.trailingAnchor),
         ])
 
-        // Position and pin, bottom-right, above the search bar when it's open.
+        // Position and pin, bottom-right.
         cornerInfo.translatesAutoresizingMaskIntoConstraints = false
         root.addSubview(cornerInfo)
         NSLayoutConstraint.activate([
@@ -200,11 +188,6 @@ final class NoteViewController: NSViewController, NSTextViewDelegate, NSTextFiel
             state.pinned = draftPinned
         }
         cornerInfo.state = state
-        if !searchBar.isHidden {
-            searchBar.matches = searchMatchIDs.isEmpty
-                ? (searchBar.field.stringValue.isEmpty ? "" : "no matches")
-                : "\(searchCursor + 1)/\(searchMatchIDs.count)"
-        }
     }
 
     func textDidChange(_ notification: Notification) {
@@ -337,10 +320,6 @@ final class NoteViewController: NSViewController, NSTextViewDelegate, NSTextFiel
         focusEditor()
     }
 
-    @objc func jumpToNewest(_ sender: Any?) {
-        if !notes.isEmpty { go(to: notes.count - 1) }
-    }
-
     @objc func togglePin(_ sender: Any?) {
         guard var note = current else {
             draftPinned.toggle()
@@ -378,7 +357,6 @@ final class NoteViewController: NSViewController, NSTextViewDelegate, NSTextFiel
         backgroundView.color = translucent ? theme.background.withAlphaComponent(0.6) : theme.background
         textView.applyAppearance(theme: theme, paper: paper, fontSize: fontSize)
         cornerInfo.theme = theme
-        searchBar.theme = theme
         drawer.theme = theme
         shortcuts.theme = theme
         updateStatus()
@@ -391,7 +369,6 @@ final class NoteViewController: NSViewController, NSTextViewDelegate, NSTextFiel
             drawer.close()
             return
         }
-        if !searchBar.isHidden { closeSearch() }
         layoutDrawer()
         scrim.isHidden = false
         drawer.open()
@@ -474,67 +451,6 @@ final class NoteViewController: NSViewController, NSTextViewDelegate, NSTextFiel
     @objc func toggleReminder(_ sender: Any?) {
         Settings.reminderEnabled.toggle()
         cornerInfo.flash(Settings.reminderEnabled ? "pop-up timer on" : "pop-up timer off")
-    }
-
-    // MARK: Search
-
-    @objc func toggleSearch(_ sender: Any?) {
-        if searchBar.isHidden {
-            drawer.close()
-            searchBar.isHidden = false
-            view.window?.makeFirstResponder(searchBar.field)
-            (searchBar.field.currentEditor() as? NSTextView)?.insertionPointColor = theme.accent
-            updateStatus()
-        } else {
-            closeSearch()
-        }
-    }
-
-    private func closeSearch() {
-        searchBar.field.stringValue = ""
-        searchBar.isHidden = true
-        searchMatchIDs = []
-        updateStatus()
-        focusEditor()
-    }
-
-    func controlTextDidChange(_ obj: Notification) {
-        let query = searchBar.field.stringValue
-        // Newest matches first.
-        searchMatchIDs = query.isEmpty ? [] : notes.reversed()
-            .filter { $0.body.localizedCaseInsensitiveContains(query) }
-            .map(\.id)
-        searchCursor = 0
-        showSearchMatch()
-        updateStatus()
-    }
-
-    func control(_ control: NSControl, textView: NSTextView, doCommandBy selector: Selector) -> Bool {
-        switch selector {
-        case #selector(NSResponder.insertNewline(_:)):
-            // Enter cycles through matches.
-            guard !searchMatchIDs.isEmpty else { return true }
-            searchCursor = (searchCursor + 1) % searchMatchIDs.count
-            showSearchMatch()
-            updateStatus()
-            return true
-        case #selector(NSResponder.cancelOperation(_:)):
-            closeSearch()
-            return true
-        default:
-            return false
-        }
-    }
-
-    private func showSearchMatch() {
-        guard searchCursor < searchMatchIDs.count,
-              let target = notes.firstIndex(where: { $0.id == searchMatchIDs[searchCursor] }) else { return }
-        go(to: target)
-        let range = (textView.string as NSString).range(of: searchBar.field.stringValue, options: .caseInsensitive)
-        guard range.location != NSNotFound else { return }
-        textView.setSelectedRange(range)
-        textView.scrollRangeToVisible(range)
-        textView.showFindIndicator(for: range)
     }
 }
 
