@@ -18,7 +18,6 @@ public enum Settings {
         public static let dropdown = "dropdown"
         public static let windowPosition = "windowPosition"
         public static let animateWindow = "animateWindow"
-        public static let hideOnClickOutside = "hideOnClickOutside"
         public static let keepOnTop = "keepOnTop"
         public static let hotkeyKeyCode = "hotkeyKeyCode"
         public static let hotkeyModifiers = "hotkeyModifiers"
@@ -92,8 +91,9 @@ public enum Settings {
     }
     /// Quick fade/slide when the window opens and closes.
     public static var animateWindow: Bool { bool(Key.animateWindow, true) }
-    /// Clicking another app or the desktop hides the panel (unless kept on top).
-    public static var hideOnClickOutside: Bool { bool(Key.hideOnClickOutside, true) }
+    /// On: floats over every app and Space until closed with the shortcut or
+    /// esc. Off: hides as soon as Popnote loses focus (another app, ⌘Tab,
+    /// switching Spaces).
     public static var keepOnTop: Bool {
         get { bool(Key.keepOnTop, false) }
         set { defaults.set(newValue, forKey: Key.keepOnTop) }

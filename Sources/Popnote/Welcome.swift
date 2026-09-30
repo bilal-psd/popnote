@@ -19,6 +19,7 @@ final class WelcomeWindowController: NSWindowController, NSWindowDelegate {
         window.titlebarAppearsTransparent = true
         window.titleVisibility = .hidden
         window.isMovableByWindowBackground = true
+        window.collectionBehavior = [.moveToActiveSpace] // activating the app shouldn't switch Spaces
         super.init(window: window)
         window.delegate = self
         window.contentView = NSHostingView(rootView: WelcomeView { [weak self] in self?.close() })
