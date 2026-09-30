@@ -186,7 +186,6 @@ private struct WindowSettings: View {
     @AppStorage(Key.showInDock) private var showInDock = false
     @AppStorage(Key.windowPosition) private var position = PopnoteCore.Settings.windowPosition.rawValue
     @AppStorage(Key.animateWindow) private var animate = true
-    @AppStorage(Key.hideOnClickOutside) private var hideOnClickOutside = true
     @AppStorage(Key.keepOnTop) private var keepOnTop = false
     @AppStorage(Key.hotkeyLabel) private var hotkeyLabel = PopnoteCore.Settings.Default.hotkeyLabel
 
@@ -212,11 +211,14 @@ private struct WindowSettings: View {
                 }
             }
             Section {
-                Toggle("Hide when clicking outside", isOn: $hideOnClickOutside)
-                Toggle(isOn: $keepOnTop) {
-                    Text("Keep on top of other windows")
-                    Text("Also stops clicks outside from hiding it. ⌘T toggles this.")
+                Picker("When you switch away", selection: $keepOnTop) {
+                    Text("Hide it").tag(false)
+                    Text("Keep it on top").tag(true)
                 }
+            } footer: {
+                FooterText(keepOnTop
+                    ? "Stays above every app and Space until you press \(hotkeyLabel) or esc. ⌘T switches."
+                    : "Hides when you click another app, press ⌘Tab or change Spaces. ⌘T switches.")
             }
         }
         .formStyle(.grouped)

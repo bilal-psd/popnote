@@ -103,6 +103,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         panel.isOpaque = !now.translucent
         panel.backgroundColor = now.translucent ? .clear : Theme.named(now.theme).background
         panel.level = now.keepOnTop ? .floating : .normal
+        panel.setFollowsAllSpaces(now.keepOnTop)
         statusItem.isVisible = now.showInMenuBar
 
         if now.showInDock != previous?.showInDock {
@@ -183,6 +184,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         UserDefaults.standard.set(min(max(size, range.lowerBound), range.upperBound), forKey: Settings.Key.textSize)
     }
 
+    /// The standard About panel stays on the Space it opened on; left open,
+    /// it made every activation (opening the note) switch to that Space.
+    @objc func showAbout(_ sender: Any?) {
+        let existing = Set(NSApp.windows.map(ObjectIdentifier.init))
+        NSApp.activate(ignoringOtherApps: true)
+        NSApp.orderFrontStandardAboutPanel(sender)
+        // AppKit creates the panel on first use; it's the one window that's new.
+        for window in NSApp.windows where !existing.contains(ObjectIdentifier(window)) {
+            window.collectionBehavior.insert(.moveToActiveSpace)
+        }
+    }
+
     @objc func showSettings(_ sender: Any?) {
         if settingsWindow == nil { settingsWindow = SettingsWindowController() }
         NSApp.activate(ignoringOtherApps: true)
@@ -191,8 +204,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     // MARK: Panel
 
+    /// Kept on top, the panel is in sight even while another app is in front,
+    /// so the shortcut closes it rather than focusing it.
     @objc func togglePanel() {
-        if panel.isVisible && NSApp.isActive {
+        if panel.isVisible && (NSApp.isActive || Settings.keepOnTop) {
             hidePanel()
         } else {
             showPanel()
@@ -202,8 +217,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     @objc func showPanel() {
         reminderTimer?.invalidate() // restarts when the panel closes
         let wasVisible = panel.isVisible
-        // Also when the panel stayed up (kept on top) while another app was in
-        // front: esc should go back to that app, not the one from last time.
+        // Also when it's already up but another app is in front (clicking a kept-
+        // on-top panel, the reminder, New Note): esc goes back to that app.
         if !wasVisible || !NSApp.isActive { rememberPreviousApp() }
         if !wasVisible { positionPanel() }
         NSApp.activate(ignoringOtherApps: true)
@@ -221,12 +236,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     /// Focus goes back *before* the fade-out, so anything typed straight after
     /// esc/⌥P lands in that app, not in the fading window.
     @objc func hidePanel() {
+        // Closed from another app (kept on top): focus is already where it belongs.
+        guard NSApp.isActive else { return dismissPanel() }
         let otherWindowsOpen = settingsWindow?.window?.isVisible == true || trashWindow?.window?.isVisible == true
-        if !otherWindowsOpen, let previousApp, !previousApp.isTerminated {
+        // Only if it's on this Space: activating it would switch to its Space.
+        if !otherWindowsOpen, let previousApp, !previousApp.isTerminated, hasWindowOnCurrentSpace(previousApp) {
             previousApp.activate()
             dismissPanel()
         } else {
             dismissPanel { if !otherWindowsOpen { NSApp.hide(nil) } }
+        }
+    }
+
+    /// Whether `app` has a normal window on the current Space. Owner and layer
+    /// need no screen recording permission, unlike window titles.
+    private func hasWindowOnCurrentSpace(_ app: NSRunningApplication) -> Bool {
+        guard let windows = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID)
+                as? [[String: Any]] else { return true }
+        return windows.contains {
+            ($0[kCGWindowOwnerPID as String] as? pid_t) == app.processIdentifier
+                && ($0[kCGWindowLayer as String] as? Int) == 0
         }
     }
 
@@ -346,15 +375,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         panel.setFrame(frame, display: false)
     }
 
-    /// Clicking another app or the desktop hides the panel. Popnote's own
-    /// Settings and Trash windows don't count, since they keep the app active.
+    /// Unless kept on top, the panel hides as soon as Popnote loses focus:
+    /// clicking another app or the desktop, ⌘Tab, or switching Spaces. It
+    /// stays on the Space you left, so it fades out there, out of sight.
+    /// Popnote's own Settings and Trash windows don't count, since they keep
+    /// the app active.
     func applicationDidResignActive(_ notification: Notification) {
         // Leaving Popnote starts the pop-up countdown, even when the panel
         // stays open behind other windows or the app was hidden from the
         // Dock. A panel kept on top is still in sight, so it doesn't count.
         guard let panel else { return } // the database failed to open; quitting
         if !(panel.isVisible && Settings.keepOnTop) { scheduleReminder() }
-        guard Settings.hideOnClickOutside, !Settings.keepOnTop, panel.attachedSheet == nil else { return }
+        guard !Settings.keepOnTop, panel.attachedSheet == nil else { return }
         dismissPanel()
     }
 
@@ -422,7 +454,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let main = NSMenu()
 
         let appMenu = NSMenu()
-        appMenu.addItem(item("About Popnote", #selector(NSApplication.orderFrontStandardAboutPanel(_:)), target: NSApp))
+        appMenu.addItem(item("About Popnote", #selector(showAbout(_:)), target: self))
         appMenu.addItem(.separator())
         appMenu.addItem(item("Settings…", #selector(showSettings(_:)), ",", target: self))
         appMenu.addItem(.separator())
