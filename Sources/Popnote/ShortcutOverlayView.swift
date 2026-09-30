@@ -40,16 +40,30 @@ final class ShortcutOverlayView: NSView {
     /// Clicks go straight through to the note.
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
 
-    /// Centred in `container`; one column if it's narrow.
+    /// Centred in `container`. One or two columns, whichever needs less
+    /// shrinking, scaled down to fit a small window instead of clipping.
     func layout(in container: NSRect) {
-        let twoColumns = container.width >= 380
+        let room = container.insetBy(dx: 8, dy: 8).size
+        let fits = [false, true].map { twoColumns -> (size: NSSize, scale: CGFloat) in
+            let size = naturalSize(twoColumns: twoColumns)
+            return (size, min(1, room.width / size.width, room.height / size.height))
+        }
+        // Two columns wins a tie: it's the layout the list is designed around.
+        let best = fits[0].scale > fits[1].scale ? fits[0] : fits[1]
+        let shown = NSSize(width: (best.size.width * best.scale).rounded(),
+                           height: (best.size.height * best.scale).rounded())
+        frame = NSRect(x: (container.midX - shown.width / 2).rounded(), y: (container.midY - shown.height / 2).rounded(),
+                       width: shown.width, height: shown.height)
+        // Drawing stays in full-size coordinates; AppKit scales it to the frame.
+        setBoundsSize(best.size)
+        needsDisplay = true
+    }
+
+    private func naturalSize(twoColumns: Bool) -> NSSize {
         let width = (twoColumns ? columnWidth * 2 + columnGap : columnWidth) + padding * 2
         let rows = twoColumns ? grid : grid.flatMap { $0 }.map { [$0] }
         let body = rows.map(rowHeight(of:)).reduce(0, +) + CGFloat(rows.count - 1) * rowGap
-        let height = header(twoColumns: twoColumns) + body + padding * 2
-        frame = NSRect(x: (container.midX - width / 2).rounded(), y: (container.midY - height / 2).rounded(),
-                       width: width, height: height)
-        needsDisplay = true
+        return NSSize(width: width, height: header(twoColumns: twoColumns) + body + padding * 2)
     }
 
     private func rowHeight(of groups: [Group]) -> CGFloat {
