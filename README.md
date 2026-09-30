@@ -56,10 +56,8 @@ You only need to do this once. The install script doesn't trigger the warning: m
 | <kbd>⌘N</kbd> | New note |
 | <kbd>⌘O</kbd> | All notes, and Trash |
 | <kbd>⌘[</kbd> <kbd>⌘]</kbd> | Previous / next note (or swipe with two fingers) |
-| <kbd>⌘0</kbd> | Newest note |
 | <kbd>⌘P</kbd> | Pin or unpin |
 | <kbd>⌘⌫</kbd> | Move to Trash |
-| <kbd>⌘F</kbd> | Search |
 | <kbd>⌘C</kbd> | Copy the whole note (when nothing is selected) |
 | <kbd>⌘↩</kbd> | Check or uncheck an item |
 | <kbd>⌘+</kbd> <kbd>⌘−</kbd> | Bigger or smaller text |

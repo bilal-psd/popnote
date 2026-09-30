@@ -470,8 +470,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         edit.addItem(item("Copy", #selector(NSText.copy(_:)), "c"))
         edit.addItem(item("Paste", #selector(NSText.paste(_:)), "v"))
         edit.addItem(item("Select All", #selector(NSText.selectAll(_:)), "a"))
-        edit.addItem(.separator())
-        edit.addItem(item("Find…", #selector(NoteViewController.toggleSearch(_:)), "f", target: noteController))
         addSubmenu(edit, to: main)
 
         let note = NSMenu(title: "Note")
@@ -480,7 +478,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         note.addItem(item("New Note", #selector(NoteViewController.newNote(_:)), "n", target: noteController))
         note.addItem(item("Previous Note", #selector(NoteViewController.previousNote(_:)), "[", target: noteController))
         note.addItem(item("Next Note", #selector(NoteViewController.nextNote(_:)), "]", target: noteController))
-        note.addItem(item("Newest Note", #selector(NoteViewController.jumpToNewest(_:)), "0", target: noteController))
         note.addItem(.separator())
         note.addItem(item("Pin / Unpin", #selector(NoteViewController.togglePin(_:)), "p", target: noteController))
         note.addItem(item("Move to Trash", #selector(NoteViewController.deleteNote(_:)), backspace, target: noteController))
