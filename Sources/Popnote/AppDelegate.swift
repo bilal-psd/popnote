@@ -496,7 +496,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let format = NSMenu(title: "Format")
         format.addItem(item("Check / Uncheck", #selector(EditorTextView.toggleCheckbox(_:)), "\r"))
         format.addItem(.separator())
-        format.addItem(item("Bigger", #selector(biggerText(_:)), "=", target: self))
+        format.addItem(item("Bigger", #selector(biggerText(_:)), "+", target: self))
+        // "+" is ⇧= on US keyboards, so plain ⌘= works too, as in Safari.
+        let equals = item("Bigger", #selector(biggerText(_:)), "=", target: self)
+        equals.isHidden = true
+        equals.allowsKeyEquivalentWhenHidden = true
+        format.addItem(equals)
         format.addItem(item("Smaller", #selector(smallerText(_:)), "-", target: self))
         addSubmenu(format, to: main)
 

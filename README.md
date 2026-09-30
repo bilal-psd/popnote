@@ -62,7 +62,7 @@ You only need to do this once. The install script doesn't trigger the warning: m
 | <kbd>⌘F</kbd> | Search |
 | <kbd>⌘C</kbd> | Copy the whole note (when nothing is selected) |
 | <kbd>⌘↩</kbd> | Check or uncheck an item |
-| <kbd>⌘=</kbd> <kbd>⌘−</kbd> | Bigger or smaller text |
+| <kbd>⌘+</kbd> <kbd>⌘−</kbd> | Bigger or smaller text |
 | <kbd>⌘T</kbd> | Keep on top of other windows |
 | <kbd>⌘R</kbd> | Turn the pop-up timer on or off |
 | <kbd>⌘,</kbd> | Settings |
