@@ -8,12 +8,12 @@
 
 ---
 
-Popnote lives in the menu bar. Press <kbd>⌥P</kbd> from any app and a small note opens in the bottom-right corner of the screen. Type, then press <kbd>esc</kbd> or click anywhere else and it's gone, with focus back where you were.
+Popnote lives in the menu bar. Press <kbd>⌥P</kbd> from any app and a small note opens in the bottom-right corner of the screen. Type, then press <kbd>esc</kbd> or click anywhere else and it's gone, with focus back where you were. Or keep it on top, and it stays in sight over every app and Space until you close it.
 
 - **Throwaway by default.** Unpinned notes delete themselves 3 days after you last edited them. Press <kbd>⌘P</kbd> to pin one and keep it.
 - **Checklists.** Type `[] ` to start a checkbox, `- ` for a bullet or `1. ` for a numbered list. <kbd>⌘↩</kbd> checks an item off.
 - **Gentle reminders.** Optionally have the note pop back up every so often, so what you jotted down doesn't slip your mind. <kbd>⌘R</kbd> turns it on or off.
-- **Keyboard first.** Hold <kbd>⌘</kbd> for a moment in a note to see every shortcut.
+- **Keyboard first.** Hold <kbd>⌘</kbd> for a moment in a note to see the shortcuts.
 - **Plain text.** Notes are Markdown under the hood, so anything you copy out reads cleanly anywhere.
 - **Nothing leaves your Mac.** No account, no sync, no network access.
 
@@ -54,20 +54,20 @@ You only need to do this once. The install script doesn't trigger the warning: m
 | <kbd>⌥P</kbd> | Open or close Popnote, from any app |
 | <kbd>esc</kbd> | Close |
 | <kbd>⌘N</kbd> | New note |
-| <kbd>⌘O</kbd> | All notes, and Trash |
+| <kbd>⌘O</kbd> | All notes, with search, and Trash |
 | <kbd>⌘[</kbd> <kbd>⌘]</kbd> | Previous / next note (or swipe with two fingers) |
 | <kbd>⌘P</kbd> | Pin or unpin |
 | <kbd>⌘⌫</kbd> | Move to Trash |
 | <kbd>⌘C</kbd> | Copy the whole note (when nothing is selected) |
 | <kbd>⌘↩</kbd> | Check or uncheck an item |
 | <kbd>⌘+</kbd> <kbd>⌘−</kbd> | Bigger or smaller text |
-| <kbd>⌘T</kbd> | Keep on top of other windows |
+| <kbd>⌘T</kbd> | Keep on top: stays over every app and Space until you close it |
 | <kbd>⌘R</kbd> | Turn the pop-up timer on or off |
 | <kbd>⌘,</kbd> | Settings |
 
 In a list, <kbd>↩</kbd> continues it, <kbd>↩</kbd> on an empty item ends it, and <kbd>⇥</kbd> / <kbd>⇧⇥</kbd> indent and outdent.
 
-Settings let you change the hotkey, how long notes last, the theme (Tokyo Night, Gruvbox, Catppuccin, Solarized, Nord or the system colours), where the window opens, whether Popnote opens at login or shows in the Dock, and an optional timer that pops the note back up (off by default; every 30 minutes once turned on).
+Settings let you change the hotkey, how long notes last, the theme (Tokyo Night, Gruvbox, Catppuccin, Solarized, Nord or the system colours), where the window opens, whether it hides when you switch away or stays on top, whether Popnote opens at login or shows in the Dock, and an optional timer that pops the note back up (off by default; every 30 minutes once turned on).
 
 <p align="center"><img src="docs/reminder.gif" width="720" alt="A short to-do list is typed into a note and ⌘R turns on the pop-up timer. The note is closed, and a few seconds later it pops back up on its own."></p>
 
