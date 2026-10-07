@@ -114,19 +114,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             scheduleHotKeyUpdate()
         }
         if now.reminderEnabled != previous?.reminderEnabled || now.reminderInterval != previous?.reminderInterval {
-            // Counts from now; while the panel is open it waits for it to close.
-            if panel.isVisible { reminderTimer?.invalidate() } else { scheduleReminder() }
+            // Counts from now; while you're in the panel it waits for you to leave.
+            if panel.isVisible && NSApp.isActive { reminderTimer?.invalidate() } else { scheduleReminder() }
         }
     }
 
-    /// Starts the countdown to popping the panel back up, if the reminder is on.
+    /// Starts the countdown to the reminder, if it's on. A hidden panel pops
+    /// back up; a panel kept on top is already in sight, so it only glows,
+    /// without taking focus, and counts down again.
     private func scheduleReminder() {
         reminderTimer?.invalidate()
         reminderTimer = nil
         guard Settings.reminderEnabled else { return }
         reminderTimer = Timer.scheduledTimer(withTimeInterval: Settings.reminderInterval, repeats: false) { [weak self] _ in
             guard let self else { return }
-            showPanel()
+            if panel.isVisible && Settings.keepOnTop {
+                scheduleReminder()
+            } else {
+                showPanel()
+            }
             // Only here: opening it yourself needs no fanfare.
             GlowWindow.flash(around: panel, color: Theme.named(Settings.theme).accent)
         }
@@ -381,11 +387,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     /// Popnote's own Settings and Trash windows don't count, since they keep
     /// the app active.
     func applicationDidResignActive(_ notification: Notification) {
-        // Leaving Popnote starts the pop-up countdown, even when the panel
+        // Leaving Popnote starts the reminder countdown, even when the panel
         // stays open behind other windows or the app was hidden from the
-        // Dock. A panel kept on top is still in sight, so it doesn't count.
+        // Dock. A panel kept on top glows instead of popping up.
         guard let panel else { return } // the database failed to open; quitting
-        if !(panel.isVisible && Settings.keepOnTop) { scheduleReminder() }
+        scheduleReminder()
         guard !Settings.keepOnTop, panel.attachedSheet == nil else { return }
         dismissPanel()
     }

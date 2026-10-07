@@ -12,7 +12,7 @@ Popnote lives in the menu bar. Press <kbd>⌥P</kbd> from any app and a small no
 
 - **Throwaway by default.** Unpinned notes delete themselves 3 days after you last edited them. Press <kbd>⌘P</kbd> to pin one and keep it.
 - **Checklists.** Type `[] ` to start a checkbox, `- ` for a bullet or `1. ` for a numbered list. <kbd>⌘↩</kbd> checks an item off.
-- **Gentle reminders.** Optionally have the note pop back up every so often, so what you jotted down doesn't slip your mind. <kbd>⌘R</kbd> turns it on or off.
+- **Gentle reminders.** Optionally have the note pop back up every so often, so what you jotted down doesn't slip your mind. A note kept on top glows instead. <kbd>⌘R</kbd> turns it on or off.
 - **Keyboard first.** Hold <kbd>⌘</kbd> for a moment in a note to see the shortcuts.
 - **Plain text.** Notes are Markdown under the hood, so anything you copy out reads cleanly anywhere.
 - **Nothing leaves your Mac.** No account, no sync, no network access.

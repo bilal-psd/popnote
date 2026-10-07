@@ -55,7 +55,7 @@ private struct GeneralSettings: View {
             Section {
                 Toggle(isOn: $reminderEnabled) {
                     Text("Pop up the note on a timer")
-                    Text("Opens Popnote again this long after you close it. ⌘R toggles this.")
+                    Text("Opens Popnote again this long after you close it, or glows a note kept on top. ⌘R toggles this.")
                 }
                 Picker("Every", selection: reminderChoice) {
                     ForEach(Self.reminderPresets, id: \.self) { Text(Self.duration($0)).tag($0) }
